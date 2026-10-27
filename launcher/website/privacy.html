@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN" data-palette="forest">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f6f7f2">
+  <meta name="description" content="ISLAND Launcher 的数据与隐私说明：网站、Microsoft 登录、本地配置、皮肤与外部服务。">
+  <meta name="referrer" content="no-referrer">
+  <title>数据与隐私说明 — ISLAND Launcher</title>
+  <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./site.config.js" defer></script>
+  <script src="./links.js" defer></script>
+  <script src="./app.js" defer></script>
+</head>
+<body data-page="privacy">
+  <a class="skip-link" href="#main" data-i18n="skip">跳到主要内容</a>
+  <header class="site-header"><div class="header-inner">
+    <a class="wordmark" href="./index.html"><span>ISLAND</span><small>Launcher</small></a>
+    <nav class="privacy-nav"><a href="./index.html" data-i18n="privacy.home">← 返回首页</a></nav>
+    <div class="header-actions"><button class="language-button" type="button" data-language-toggle aria-label="Switch to English">EN</button><a class="github-link unavailable" data-github aria-disabled="true" tabindex="-1">GitHub <span aria-hidden="true">↗</span></a></div>
+  </div></header>
+  <main id="main" class="privacy-main section-shell">
+    <div class="privacy-intro"><p class="eyebrow">ISLAND LAUNCHER / DATA & PRIVACY</p><h1 data-i18n="privacy.title">数据与隐私说明</h1><p class="privacy-date"><span data-i18n="privacy.updated">更新日期：2026 年 10 月 27 日</span> · <span data-i18n="privacy.version">对应启动器版本</span> <span data-version>0.10.22</span></p><p class="privacy-lead" data-i18n="privacy.lead">这里说明介绍网站与 Windows 启动器如何处理信息，以及哪些操作会访问外部服务。</p></div>
+    <div class="privacy-layout">
+      <aside class="privacy-contents" aria-label="本页目录" data-i18n-aria="privacy.contents"><a href="#website" data-i18n="privacy.nav1">01 介绍网站</a><a href="#local-data" data-i18n="privacy.nav2">02 本机数据</a><a href="#account" data-i18n="privacy.nav3">03 账号与皮肤</a><a href="#connections" data-i18n="privacy.nav4">04 外部连接</a><a href="#control" data-i18n="privacy.nav5">05 你的选择</a></aside>
+      <article class="privacy-article">
+        <section id="website"><span class="section-number">01</span><h2 data-i18n="privacy.h1">介绍网站</h2><p data-i18n="privacy.p1a">本站是静态介绍页面，不提供账号注册、微软登录表单或文件上传。本站代码未集成广告、流量分析、第三方字体或追踪脚本，也不使用 Cookie 或本地存储进行访客追踪。语言选择通过页面 URL 参数保留。</p><p data-i18n="privacy.p1b">访问网页仍会产生正常的网络请求。部署到 Cloudflare 后，托管服务可能依据其配置和隐私政策处理 IP 地址、请求时间等网络信息。本说明不代表托管服务完全不产生日志。</p><p data-i18n="privacy.p1c">下载按钮将跳转到 GitHub Releases。访问 GitHub 时，适用 GitHub 自身的服务条款与隐私政策。</p></section>
+        <section id="local-data"><span class="section-number">02</span><h2 data-i18n="privacy.h2">启动器在本机保存的数据</h2><p data-i18n="privacy.p2a">启动器会在本机保存游戏目录、实例偏好、收藏、游玩记录、Java 检测记录、运行参数和外观设置。账号信息可能包括玩家名称、UUID、皮肤图像及所用的 Microsoft 应用 ID。</p><p data-i18n="privacy.p2b">默认配置目录为 %LOCALAPPDATA%\IslandLauncher，也可由启动参数指定独立目录。Java 检测列表存放在同一配置目录下的 java-runtimes.json。游戏、模组和存档位于你选择的游戏目录。</p><p data-i18n="privacy.p2c">启动器会保存启动诊断与游戏输出日志。游戏和模组可能自行输出其他信息，请在对外分享日志前检查其中的内容。</p></section>
+        <section id="account"><span class="section-number">03</span><h2 data-i18n="privacy.h3">Microsoft 账号与皮肤</h2><p data-i18n="privacy.p3a">Microsoft 登录默认使用系统浏览器授权码 + PKCE，也可切换为设备码。浏览器登录只在授权期间开启本机回环回调；不使用客户端密钥。账号密码在 Microsoft 官方网页输入，启动器不收集 Microsoft 密码。</p><p data-i18n="privacy.p3b">授权流程会联系 Microsoft、Xbox 与 Minecraft 服务以取得游戏会话及玩家档案。刷新凭据在保存前通过当前 Windows 用户的 DPAPI 加密保护；游戏会话凭据用于本次认证和启动。</p><p data-i18n="privacy.p3c">同步正版皮肤会读取官方玩家档案。由你主动触发的上传皮肤或恢复默认皮肤操作，会访问 Minecraft 官方接口并修改该账号的皮肤。仅在本地选择预览时，不会自动上传。</p><div class="privacy-callout" data-i18n="privacy.p3d">当前应用的 Minecraft API 访问资格仍待确认，正版登录及官方皮肤操作的实际可用状态，以后续发布说明为准。</div></section>
+        <section id="connections"><span class="section-number">04</span><h2 data-i18n="privacy.h4">下载与外部连接</h2><p data-i18n="privacy.p4a">通过 Modrinth 下载整合包、Mod、资源包、光影，或下载游戏、加载器、依赖与皮肤时，启动器会连接相应的发布服务和内容分发网络。根据你的选择，也可能连接镜像源或整合包相关服务。对方可能依据自身政策处理网络请求信息。</p><p data-i18n="privacy.p4b">游戏、模组及第三方整合包拥有各自的网络行为和隐私政策，本说明不覆盖这些第三方程序的全部行为。网站展示截图使用虚构实例和本地演示玩家，不包含用户的真实账号或存档。</p></section>
+        <section id="control"><span class="section-number">05</span><h2 data-i18n="privacy.h5">你的选择与项目反馈</h2><p data-i18n="privacy.p5a">你可以在启动器中移除账号、调整实例目录或更改设置，也可以在备份后自行清理本机配置。请区分启动器配置和游戏存档，清理前保留需要的数据。</p><p data-i18n="privacy.p5b">项目反馈通过公开的 GitHub Issues 提供。请勿在公开问题中上传账号凭据、私人游戏数据或未经检查的日志。</p><p data-i18n="privacy.p5c">ISLAND Launcher 是非官方项目，与 Mojang Studios 或 Microsoft 无隶属、合作或背书关系。项目许可与所用第三方组件的许可说明随发布包提供。</p><a class="text-link unavailable" data-contact aria-disabled="true" tabindex="-1"><span data-i18n="privacy.contact">前往项目反馈</span><span aria-hidden="true">↗</span></a></section>
+      </article>
+    </div>
+  </main>
+  <footer class="site-footer section-shell"><a class="wordmark" href="./index.html"><span>ISLAND</span><small>Launcher</small></a><p data-i18n="footer.independent">独立开发的非官方 Minecraft Java 版工具。</p><div class="footer-links"><a href="./index.html" data-i18n="privacy.home">← 返回首页</a><a href="./LICENSE.txt">MIT License</a><small>© 2026 ISLAND Launcher</small></div></footer>
+</body>
+</html>
