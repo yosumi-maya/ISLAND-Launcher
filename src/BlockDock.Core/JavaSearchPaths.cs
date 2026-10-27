@@ -35,7 +35,7 @@ public sealed record JavaSearchPaths(IReadOnlyList<string> DirectCandidates, IRe
     }
 
     // ZIP distributions keep their vendor/version folder names. Inspect nearby folder
-    // names only; the bounded discovery walk still skips game content and junctions.
+    // names and standard runtime files; the bounded discovery walk still skips game content and junctions.
     private static void AddPortableRoots(string parent, List<string> roots)
     {
         try
@@ -43,7 +43,7 @@ public sealed record JavaSearchPaths(IReadOnlyList<string> DirectCandidates, IRe
             foreach (var child in Directory.EnumerateDirectories(parent))
             {
                 var name = Path.GetFileName(child);
-                if (new[] { "java", "jdk", "jre", "zulu", "azul" }.Any(prefix =>
+                if (HasRuntimeLayout(child) || new[] { "java", "jdk", "jre", "zulu", "azul" }.Any(prefix =>
                     name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
                     && (name.Length == prefix.Length || char.IsDigit(name[prefix.Length]) || name[prefix.Length] is '-' or '_' or '.' or ' ')))
                 {
@@ -54,6 +54,13 @@ public sealed record JavaSearchPaths(IReadOnlyList<string> DirectCandidates, IRe
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { }
     }
+
+    private static bool HasRuntimeLayout(string folder)
+        => File.Exists(Path.Combine(folder, "bin", "java.exe"))
+            && (File.Exists(Path.Combine(folder, "release"))
+                || File.Exists(Path.Combine(folder, "lib", "modules"))
+                || File.Exists(Path.Combine(folder, "lib", "rt.jar"))
+                || File.Exists(Path.Combine(folder, "jre", "lib", "rt.jar")));
 
     [SupportedOSPlatform("windows")]
     private static void AddRegistryPaths(List<string> paths)

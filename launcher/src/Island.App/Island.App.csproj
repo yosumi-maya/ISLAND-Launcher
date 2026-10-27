@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType><TargetFramework>net8.0-windows</TargetFramework><UseWPF>true</UseWPF>
-    <AssemblyName>岛屿启动器</AssemblyName><RootNamespace>Island.App</RootNamespace><Version>0.10.23</Version>
+    <AssemblyName>岛屿启动器</AssemblyName><RootNamespace>Island.App</RootNamespace><Version>0.10.24</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest><ApplicationIcon>Island.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../Island.Core/Island.Core.csproj" /></ItemGroup>

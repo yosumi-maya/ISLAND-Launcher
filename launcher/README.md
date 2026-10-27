@@ -1,6 +1,8 @@
-# 岛屿启动器 · Island Launcher 0.10.23
+# 岛屿启动器 · Island Launcher 0.10.24
 
 独立的 Windows Minecraft Java 启动器。原生 WPF 山林界面，支持浅色与完整深色配色，无嵌入式浏览器。
+
+0.10.24 进一步修复重命名 Java 目录的扫描：除版本化目录名外，也检查 bin/java.exe 与 release、lib/modules、lib/rt.jar 等运行时结构，识别 zulujava8 等名称。实际版本、厂商和架构仍由执行探测确定。0.10.23 检测缓存也会在升级后自动重扫一次。
 
 0.10.23 修复未扫描到 Zulu 解压版 Java 的问题：识别游戏目录和相邻目录中的 zulu25-win_x64、Zulu JRE、Azul 和带版本号的 JDK 文件夹；补充用户安装目录与 Zulu 32 位注册分支。旧版 Java 检测缓存升级后自动重扫一次，后续继续复用缓存。仍通过实际 java.exe 子进程读取版本、厂商和架构，不凭目录名认定可用。
 
@@ -74,7 +76,7 @@
 
 ## 直接使用
 
-解压 `IslandLauncher-0.10.23-win-x64.zip`，双击 `岛屿启动器.exe`。便携包包含 .NET 运行时；**游戏所需的 64 位 Java 需要自行安装**。
+解压 `IslandLauncher-0.10.24-win-x64.zip`，双击 `岛屿启动器.exe`。便携包包含 .NET 运行时；**游戏所需的 64 位 Java 需要自行安装**。
 
 1. 在「玩家账号」添加本地玩家，或点击 Microsoft 登录。
 2. 在侧栏进入「下载中心」，或点击「添加实例 → 下载游戏」，选择 Minecraft 和加载器并加入下载队列。

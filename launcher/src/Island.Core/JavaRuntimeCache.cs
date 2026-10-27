@@ -8,7 +8,7 @@ public sealed record JavaCacheSnapshot(IReadOnlyList<JavaInstallation> Items, IR
 public sealed class JavaRuntimeCache
 {
     private sealed record Entry(JavaInstallation Java, long Length, long Modified);
-    private const int DiscoveryRevision = 2;
+    private const int DiscoveryRevision = 3;
     private sealed record Saved(int Schema, Entry[] Entries, int DiscoveryRevision = 0);
     internal static JavaRuntimeCache Transient { get; } = new();
     private readonly string? path;

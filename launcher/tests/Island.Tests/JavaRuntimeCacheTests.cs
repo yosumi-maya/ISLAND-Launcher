@@ -75,5 +75,12 @@ internal static class JavaRuntimeCacheTests
         var reopen = new JavaRuntimeCache(upgradeFolder, DiscoverUpgrade, Probe);
         check(!reopen.Snapshot().NeedsRefresh && (await reopen.GetAvailableAsync(root, "", default)).Count == 2 && upgradeScans == 2,
             "The upgraded discovery cache is saved and reused on the next launch without rescanning");
+        var previousRelease = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(savedPath))!.AsObject();
+        previousRelease["DiscoveryRevision"] = 2; File.WriteAllText(savedPath, previousRelease.ToJsonString());
+        var from23 = new JavaRuntimeCache(upgradeFolder, DiscoverUpgrade, Probe);
+        check(from23.Snapshot().NeedsRefresh && (await from23.GetAvailableAsync(root, "", default)).Count == 2 && upgradeScans == 3,
+            "A 0.10.23 discovery cache also refreshes once for renamed Java homes");
+        check(!(new JavaRuntimeCache(upgradeFolder, DiscoverUpgrade, Probe)).Snapshot().NeedsRefresh,
+            "The renamed-runtime discovery revision is persisted after migration");
     }
 }

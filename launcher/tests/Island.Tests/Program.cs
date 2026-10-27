@@ -13,14 +13,17 @@ if (inspectIndex >= 0)
     foreach (var instance in InstanceCatalog.ListInstalled(Path.GetFullPath(args[inspectIndex + 1]))) Console.WriteLine(instance.Name + " | " + instance.LoaderLabel);
     return;
 }
-if (args is ["--java-scan", var gameRoot, var expectedJava])
+if (args.Length >= 3 && args[0] == "--java-scan")
 {
-    var discovered = await JavaRuntimeCatalog.DiscoverAsync(Path.GetFullPath(gameRoot), "", default);
+    var discovered = await JavaRuntimeCatalog.DiscoverAsync(Path.GetFullPath(args[1]), "", default);
     foreach (var java in discovered) Console.WriteLine(java.Display);
-    var expected = discovered.SingleOrDefault(java => java.Path.Equals(Path.GetFullPath(expectedJava), StringComparison.OrdinalIgnoreCase));
-    if (expected is not { Is64Bit: true } || !expected.Vendor.Contains("Azul", StringComparison.OrdinalIgnoreCase))
-        throw new Exception("Expected executable Azul Zulu runtime was not discovered");
-    Console.WriteLine("PASS LIVE ZULU SCAN: " + expected.Display);
+    foreach (var expectedJava in args.Skip(2))
+    {
+        var expected = discovered.SingleOrDefault(java => java.Path.Equals(Path.GetFullPath(expectedJava), StringComparison.OrdinalIgnoreCase));
+        if (expected is not { Is64Bit: true } || !expected.Vendor.Contains("Azul", StringComparison.OrdinalIgnoreCase))
+            throw new Exception("Expected executable Azul Zulu runtime was not discovered: " + expectedJava);
+        Console.WriteLine("PASS LIVE ZULU SCAN: " + expected.Display);
+    }
     return;
 }
 
