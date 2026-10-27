@@ -1,0 +1,16 @@
+bin/
+obj/
+.vs/
+artifacts/
+dist/
+docs/superpowers/
+*.user
+*.log
+.minecraft/
+BlockDock.Private.props
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.key

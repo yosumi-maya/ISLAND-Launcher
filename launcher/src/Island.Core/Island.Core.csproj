@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0-windows</TargetFramework></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../../src/BlockDock.Core/BlockDock.Core.csproj" /></ItemGroup>
+  <ItemGroup><InternalsVisibleTo Include="Island.Tests" /></ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Assets/java-launch-wrapper-1.4.4.jar" LogicalName="Island.Core.JavaLaunchWrapper.jar" />
+    <EmbeddedResource Include="Assets/lwjgl-unsafe-agent-2.0.jar" LogicalName="Island.Core.LwjglUnsafeAgent.jar" />
+    <EmbeddedResource Include="../../third-party/JAVA-LAUNCH-WRAPPER-LICENSE.txt" LogicalName="Island.Core.JavaLaunchWrapper.LICENSE.txt" />
+    <EmbeddedResource Include="../../third-party/LWJGL-UNSAFE-AGENT-LICENSE.txt" LogicalName="Island.Core.LwjglUnsafeAgent.LICENSE.txt" />
+  </ItemGroup>
+</Project>
