@@ -8,7 +8,8 @@ public sealed record JavaCacheSnapshot(IReadOnlyList<JavaInstallation> Items, IR
 public sealed class JavaRuntimeCache
 {
     private sealed record Entry(JavaInstallation Java, long Length, long Modified);
-    private sealed record Saved(int Schema, Entry[] Entries);
+    private const int DiscoveryRevision = 2;
+    private sealed record Saved(int Schema, Entry[] Entries, int DiscoveryRevision = 0);
     internal static JavaRuntimeCache Transient { get; } = new();
     private readonly string? path;
     private readonly Func<string, string, CancellationToken, Task<IReadOnlyList<JavaInstallation>>> discover;
@@ -33,7 +34,7 @@ public sealed class JavaRuntimeCache
                 entries = saved.Entries.Where(entry => entry?.Java is { } java && Path.IsPathFullyQualified(java.Path)
                     && java.Major is >= 1 and <= 100 && java.Version is not null && java.Architecture is not null && java.Vendor is not null)
                     .DistinctBy(entry => entry.Java.Path, StringComparer.OrdinalIgnoreCase).ToArray();
-                known = true;
+                known = saved.DiscoveryRevision == DiscoveryRevision;
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException) { }
@@ -125,7 +126,7 @@ public sealed class JavaRuntimeCache
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(temporary, JsonSerializer.Serialize(new Saved(1, entries))); File.Move(temporary, path, true); SaveWarning = null;
+            File.WriteAllText(temporary, JsonSerializer.Serialize(new Saved(1, entries, DiscoveryRevision))); File.Move(temporary, path, true); SaveWarning = null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { SaveWarning = "Java 检测列表未能保存：" + ex.Message; }
         finally { try { if (File.Exists(temporary)) File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { } }

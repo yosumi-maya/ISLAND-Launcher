@@ -57,5 +57,23 @@ internal static class JavaRuntimeCacheTests
         installed = [];
         try { await damaged.ResolveAsync(new() { GameDirectory = root, JavaPath = j21.Path }, new(21), new(), default); throw new Exception("No Java accepted"); }
         catch (InvalidOperationException ex) { check(scans == before + 1 && ex.Message.Contains("未找到可用的 64 位 Java 21"), "Recovery with no compatible Java stops with an actionable error after one scan"); }
+
+        var upgradeFolder = Path.Combine(folder, "upgrade"); var upgradeScans = 0;
+        IReadOnlyList<JavaInstallation> upgraded = [j17];
+        Task<IReadOnlyList<JavaInstallation>> DiscoverUpgrade(string _, string __, CancellationToken token)
+        { token.ThrowIfCancellationRequested(); upgradeScans++; return Task.FromResult(upgraded); }
+        await new JavaRuntimeCache(upgradeFolder, DiscoverUpgrade, Probe).GetAvailableAsync(root, "", default);
+        var savedPath = Path.Combine(upgradeFolder, "java-runtimes.json");
+        var legacy = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(savedPath))!.AsObject();
+        legacy.Remove("DiscoveryRevision"); File.WriteAllText(savedPath, legacy.ToJsonString());
+        var zulu = Runtime("zulu25-win_x64", 25) with { Vendor = "Azul Systems, Inc." };
+        upgraded = [j17, zulu];
+        var upgrade = new JavaRuntimeCache(upgradeFolder, DiscoverUpgrade, Probe);
+        check(upgrade.Snapshot() is { NeedsRefresh: true, Items.Count: 1 }, "An old Java discovery cache retains its valid entries while requesting one upgraded scan");
+        check((await upgrade.GetAvailableAsync(root, "", default)).Any(java => java.Path == zulu.Path) && upgradeScans == 2,
+            "Upgrading discovery adds previously missed Zulu runtimes without deleting launcher settings");
+        var reopen = new JavaRuntimeCache(upgradeFolder, DiscoverUpgrade, Probe);
+        check(!reopen.Snapshot().NeedsRefresh && (await reopen.GetAvailableAsync(root, "", default)).Count == 2 && upgradeScans == 2,
+            "The upgraded discovery cache is saved and reused on the next launch without rescanning");
     }
 }

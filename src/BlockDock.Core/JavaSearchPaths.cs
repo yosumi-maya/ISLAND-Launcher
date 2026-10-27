@@ -16,7 +16,7 @@ public sealed record JavaSearchPaths(IReadOnlyList<string> DirectCandidates, IRe
         foreach (var parent in new[] { Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) })
         {
             if (parent.Length == 0) continue;
-            foreach (var vendor in new[] { "Java", "Eclipse Adoptium", "Eclipse Foundation", "AdoptOpenJDK", "Microsoft", "Zulu", "BellSoft", "Amazon Corretto", "Semeru", "Programs/Java", "Programs/Eclipse Adoptium" })
+            foreach (var vendor in new[] { "Java", "Eclipse Adoptium", "Eclipse Foundation", "AdoptOpenJDK", "Microsoft", "Zulu", "Azul", "Azul Systems", "BellSoft", "Amazon Corretto", "Semeru", "Programs/Java", "Programs/Eclipse Adoptium", "Programs/Zulu", "Programs/Azul" })
                 roots.Add(Path.Combine(parent, vendor));
         }
         var user = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -25,11 +25,34 @@ public sealed record JavaSearchPaths(IReadOnlyList<string> DirectCandidates, IRe
         foreach (var parent in new[] { Path.GetFullPath(root), Path.GetDirectoryName(Path.GetFullPath(root)), AppContext.BaseDirectory })
         {
             if (parent is null) continue;
-            foreach (var relative in new[] { "runtime", "java", "jre", "jdk", "Java", "PCL/Java", "HMCL/java", "PrismLauncher/java", "java-runtime" })
+            direct.Add(parent);
+            foreach (var relative in new[] { "runtime", "java", "jre", "jdk", "zulu", "azul", "PCL/Java", "HMCL/java", "PrismLauncher/java", "java-runtime" })
                 roots.Add(Path.Combine(parent, relative));
+            AddPortableRoots(parent, roots);
         }
         if (OperatingSystem.IsWindows()) AddRegistryPaths(direct);
         return new(direct.Where(p => !string.IsNullOrWhiteSpace(p)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(), roots.Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
+    }
+
+    // ZIP distributions keep their vendor/version folder names. Inspect nearby folder
+    // names only; the bounded discovery walk still skips game content and junctions.
+    private static void AddPortableRoots(string parent, List<string> roots)
+    {
+        try
+        {
+            foreach (var child in Directory.EnumerateDirectories(parent))
+            {
+                var name = Path.GetFileName(child);
+                if (new[] { "java", "jdk", "jre", "zulu", "azul" }.Any(prefix =>
+                    name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                    && (name.Length == prefix.Length || char.IsDigit(name[prefix.Length]) || name[prefix.Length] is '-' or '_' or '.' or ' ')))
+                {
+                    roots.Add(child);
+                    if (roots.Count >= 512) break;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { }
     }
 
     [SupportedOSPlatform("windows")]
@@ -41,7 +64,7 @@ public sealed record JavaSearchPaths(IReadOnlyList<string> DirectCandidates, IRe
             try
             {
                 using var registry = RegistryKey.OpenBaseKey(hive, view);
-                foreach (var name in new[] { @"SOFTWARE\JavaSoft", @"SOFTWARE\AdoptOpenJDK", @"SOFTWARE\Eclipse Adoptium", @"SOFTWARE\Eclipse Foundation", @"SOFTWARE\Azul Systems\Zulu" })
+                foreach (var name in new[] { @"SOFTWARE\JavaSoft", @"SOFTWARE\AdoptOpenJDK", @"SOFTWARE\Eclipse Adoptium", @"SOFTWARE\Eclipse Foundation", @"SOFTWARE\Azul Systems\Zulu", @"SOFTWARE\Azul Systems\Zulu 32-bit" })
                 {
                     using var vendor = registry.OpenSubKey(name);
                     if (vendor is not null) ReadKey(vendor, 0, paths);

@@ -100,7 +100,7 @@ public static class GameLauncher
                 ["auth_access_token"] = player.AccessToken, ["auth_session"] = "token:" + player.AccessToken + ":" + player.Uuid,
                 ["user_type"] = player.Microsoft ? "msa" : "legacy", ["version_type"] = version.Profile.Str("type", "release"),
                 ["user_properties"] = "{}", ["natives_directory"] = natives, ["launcher_name"] = "IslandLauncher",
-                ["launcher_version"] = "0.10.22", ["classpath"] = string.Join(Path.PathSeparator, libraries.Distinct(StringComparer.OrdinalIgnoreCase)),
+                ["launcher_version"] = "0.10.23", ["classpath"] = string.Join(Path.PathSeparator, libraries.Distinct(StringComparer.OrdinalIgnoreCase)),
                 ["library_directory"] = SafePaths.Under(root, "libraries"), ["classpath_separator"] = Path.PathSeparator.ToString(),
                 // HMCL adds this placeholder to Forge's ignoreList when normalizing imported profiles.
                 ["primary_jar_name"] = Path.GetFileName(version.ClientJar),

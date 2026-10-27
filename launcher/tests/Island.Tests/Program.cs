@@ -13,6 +13,16 @@ if (inspectIndex >= 0)
     foreach (var instance in InstanceCatalog.ListInstalled(Path.GetFullPath(args[inspectIndex + 1]))) Console.WriteLine(instance.Name + " | " + instance.LoaderLabel);
     return;
 }
+if (args is ["--java-scan", var gameRoot, var expectedJava])
+{
+    var discovered = await JavaRuntimeCatalog.DiscoverAsync(Path.GetFullPath(gameRoot), "", default);
+    foreach (var java in discovered) Console.WriteLine(java.Display);
+    var expected = discovered.SingleOrDefault(java => java.Path.Equals(Path.GetFullPath(expectedJava), StringComparison.OrdinalIgnoreCase));
+    if (expected is not { Is64Bit: true } || !expected.Vendor.Contains("Azul", StringComparison.OrdinalIgnoreCase))
+        throw new Exception("Expected executable Azul Zulu runtime was not discovered");
+    Console.WriteLine("PASS LIVE ZULU SCAN: " + expected.Display);
+    return;
+}
 
 var root = Path.Combine(Path.GetTempPath(), "Island Tests " + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(root);
@@ -40,6 +50,7 @@ try
     await LaunchOptionsTests.RunAsync(root, Check);
     await LaunchCompatibilityTests.RunAsync(root, Check);
     await JavaRuntimeCacheTests.RunAsync(root, Check);
+    ZuluDiscoveryTests.Run(root, Check);
     var offline = PlayerAccount.Offline("Notch");
     Check(offline.Uuid == "b50ad385829d3141a2167e7d7539ba7f", "Java-compatible offline UUID");
     Throws(() => PlayerAccount.Offline("坏 名字"), "Reject invalid player names");

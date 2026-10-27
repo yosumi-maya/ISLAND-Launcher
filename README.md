@@ -1,8 +1,10 @@
 # ISLAND 岛屿启动器
 
-独立的 Windows Minecraft Java 版启动器，使用 .NET 8 / WPF。当前开发预览版 **0.10.22**。
+独立的 Windows Minecraft Java 版启动器，使用 .NET 8 / WPF。当前开发预览版 **0.10.23**。
 
 [下载与版本说明](https://github.com/yosumi-maya/ISLAND-Launcher/releases) · [问题反馈](https://github.com/yosumi-maya/ISLAND-Launcher/issues)
+
+0.10.23 修复 Zulu 解压版 Java 的扫描遗漏，并在升级后自动更新一次 Java 检测缓存。
 
 ## 功能
 
@@ -16,7 +18,7 @@
 
 ## 下载
 
-在 Releases 下载 `IslandLauncher-0.10.22-win-x64.zip`，解压后运行 `岛屿启动器.exe`。便携包包含 .NET 运行时；请另行安装游戏所需的 64 位 Java。随包提供 SHA-256 校验与第三方组件许可。
+在 Releases 下载 `IslandLauncher-0.10.23-win-x64.zip`，解压后运行 `岛屿启动器.exe`。便携包包含 .NET 运行时；请另行安装游戏所需的 64 位 Java。随包提供 SHA-256 校验与第三方组件许可。
 
 ## 从源码构建
 

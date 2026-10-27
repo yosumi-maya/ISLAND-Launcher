@@ -71,7 +71,7 @@ public partial class MainWindow : Window
         ready = true; NavLibrary.IsChecked = true;
         Loaded += (_, _) =>
         {
-            try { ReloadLibrary(); ReloadAccounts(); Log("岛屿启动器 0.10.22 已就绪。"); if (store.LoadWarning is not null) Log(store.LoadWarning); }
+            try { ReloadLibrary(); ReloadAccounts(); Log("岛屿启动器 0.10.23 已就绪。"); if (store.LoadWarning is not null) Log(store.LoadWarning); }
             catch (Exception ex) { Report(ex); }
             _ = RefreshJavaAsync(false);
         };
