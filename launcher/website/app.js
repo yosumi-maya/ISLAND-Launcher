@@ -124,7 +124,7 @@
     "privacy.nav5": "05 Your choices",
     "privacy.h1": "Introduction website",
     "privacy.p1a": "This is a static introduction website. It has no account registration, Microsoft sign-in form or file upload. The website code includes no advertising, analytics, third-party fonts or tracking scripts, and does not use cookies or local storage to track visitors. Language selection is retained through a URL parameter.",
-    "privacy.p1b": "Browsing still generates normal network requests. If deployed to Cloudflare, the hosting service may process IP addresses, request times and other network information according to its configuration and privacy policy. This notice does not claim that the hosting service produces no logs.",
+    "privacy.p1b": "Browsing still generates normal network requests. The website hosting service may process IP addresses, request times and other network information according to its configuration and privacy policy. This notice does not claim that the hosting service produces no logs.",
     "privacy.p1c": "Once downloads open, download links will lead to GitHub. GitHub's own terms and privacy policy apply when you visit GitHub.",
     "privacy.h2": "Information stored locally by the launcher",
     "privacy.p2a": "The launcher stores game directories, instance preferences, favorites, play history, Java detection records, launch options and appearance settings on your computer. Account information may include the player's name, UUID, skin image and the Microsoft application ID in use.",
@@ -137,7 +137,7 @@
     "privacy.p3d": "This application's Minecraft API access is still awaiting confirmation. Refer to future release notes for the availability of online sign-in and official skin operations.",
     "privacy.h4": "Downloads and external connections",
     "privacy.p4a": "Downloading games, loaders, dependencies or skins contacts their distribution services and content delivery networks. Depending on your choices, the launcher may also contact mirrors and modpack services. Those services may process network requests under their own policies.",
-    "privacy.p4b": "Games, mods and third-party modpacks have their own network behavior and privacy policies; this notice does not cover all their behavior. The website screenshots use fictional instances and a local demo player, not a user's real account or saves.",
+    "privacy.p4b": "Games, mods and third-party modpacks have their own network behavior and privacy policies; this notice does not cover all their behavior. Website illustrations use fictional instances. Actual application screenshots are supplied by the project owner and reviewed for private information before publication.",
     "privacy.h5": "Your choices and project feedback",
     "privacy.p5a": "You can remove accounts, change instance directories and adjust preferences in the launcher. You can also clean up local configuration after making a backup. Distinguish launcher settings from game saves and preserve any data you need.",
     "privacy.p5b": "Public feedback channels will be supplied with the GitHub project. Until download and feedback URLs are available, the website clearly marks these links as unavailable and does not redirect to another project or a fabricated address.",
@@ -228,7 +228,7 @@
       downloadNote: "下载通过 GitHub Releases 提供，请以发布页的文件和说明为准。",
       unavailableNote: "下载尚未开放。发布后将通过 GitHub Releases 提供。",
       linkUnavailable: "项目发布后开放", motionReduced: "已遵循系统的减少动态效果偏好。",
-      screenshotAlt: "ISLAND Launcher 实际界面，使用演示实例与本地玩家",
+      screenshotAlt: "ISLAND Launcher 实际界面",
       faqQ: "下载和更新在哪里提供？", faqA: "下载与版本更新通过 GitHub Releases 提供，请查看发布页的说明、版本号和适用条件。此网站本身不托管启动器安装包。",
       motion: {
         off: "关闭卡片动效，保持静止。",
@@ -244,7 +244,7 @@
       downloadNote: "Downloads are provided through GitHub Releases. Check the release page for files and instructions.",
       unavailableNote: "Downloads have not opened yet. Releases will be available on GitHub.",
       linkUnavailable: "Available when the project is published", motionReduced: "Your system's reduced-motion preference is respected.",
-      screenshotAlt: "Actual ISLAND Launcher interface with fictional instances and a local demo player",
+      screenshotAlt: "Actual ISLAND Launcher interface",
       faqQ: "Where are downloads and updates provided?", faqA: "Downloads and version updates are provided through GitHub Releases. Check its release notes, version and requirements. This website does not host launcher binaries.",
       motion: {
         off: "Card animation is off. The cards stay still.",
@@ -411,3 +411,4 @@
   }
   applyLanguage(false);
 }());
+
