@@ -1,3 +1,4 @@
+# 项目目前处于开发预览版
 # ISLAND 岛屿启动器
 
 独立的 Windows Minecraft Java 版启动器，使用 .NET 8 / WPF。当前开发预览版 **0.10.24**。
