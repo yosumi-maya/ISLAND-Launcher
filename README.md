@@ -31,7 +31,6 @@ dotnet run --project launcher/tests/Island.App.Tests -c Release
 ./launcher/build.ps1
 ```
 
-共享核心和下载队列源文件位于根目录 `src/`，请保留完整仓库结构。验证记录见 [VERIFICATION](launcher/VERIFICATION.md)。静态网站源文件位于 `launcher/website/`。
 
 ## 许可与声明
 
