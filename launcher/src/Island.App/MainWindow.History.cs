@@ -43,11 +43,7 @@ public partial class MainWindow
         if (recentGame is not { } recent || operation is not null || game is not null) return;
         try
         {
-            var folder = state.GameFolders.First(f => GameFolder.SamePath(f.Directory, recent.Card.GameDirectory));
-            var key = recent.Card.Key;
-            ActivateGameFolder(folder.Id);
-            InstanceList.SelectedItem = InstanceList.Items.Cast<InstanceCard>().FirstOrDefault(card => card.Key == key);
-            if (Selected is { } selected) await LaunchInstanceAsync(selected, recent.World?.FolderName);
+            await LaunchInstanceAsync(recent.Card, recent.World?.FolderName, activateFolder: true);
         }
         catch (Exception ex) { Report(ex); }
     }

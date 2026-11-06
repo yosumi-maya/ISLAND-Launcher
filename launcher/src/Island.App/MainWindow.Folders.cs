@@ -52,7 +52,7 @@ public partial class MainWindow
         updatingFolders = true;
         try
         {
-            state.SelectGameFolder(id); state.ShowFavorites = false; RootBox.Text = state.GameDirectory;
+            state.SelectGameFolder(id); state.ShowFavorites = false;
             SearchBox.Clear();
         }
         finally { updatingFolders = false; }
@@ -77,7 +77,10 @@ public partial class MainWindow
                 var folder = state.GameFolders.First(folder => GameFolder.SamePath(folder.Directory, edit.Directory));
                 folder.Name = edit.Name; folder.Isolation = edit.Isolation;
             }
-            store.Save(state); ReloadLibrary(); StatusLabel.Text = "●  目录设置已保存";
+            var retained = dialog.Result.Select(edit => GameFolder.NormalizePath(edit.Directory)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var folder in state.GameFolders.Where(folder => !retained.Contains(GameFolder.NormalizePath(folder.Directory))).ToArray())
+                state.RemoveGameFolder(folder.Id);
+            store.Save(state); ReloadLibrary(); StatusLabel.Text = "●  目录设置已保存，磁盘文件保留";
         }
         catch (Exception ex) { Report(ex); }
     }

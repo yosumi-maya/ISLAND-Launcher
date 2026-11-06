@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO.Compression;
 using System.Net;
 using System.Security.Cryptography;
@@ -40,13 +40,33 @@ void Write(string id, JsonObject json)
 JsonObject Parse(string json) => JsonNode.Parse(json)!.AsObject();
 try
 {
+    var benchmarkIndex = Array.IndexOf(args, "--inspect-benchmark");
+    if (benchmarkIndex >= 0)
+    {
+        for (var sample = 0; sample < 3; sample++)
+        {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var pack = await ModpackInstaller.InspectAsync(Path.GetFullPath(args[benchmarkIndex + 1]), default);
+            Console.WriteLine($"INSPECT_MS={stopwatch.Elapsed.TotalMilliseconds:0.0} NAME={pack.Name}");
+        }
+        return;
+    }
+    if(args.Contains("--terracotta-only"))
+    {
+        var packageIndex=Array.IndexOf(args,"--terracotta-package");
+        await TerracottaTests.RunAsync(root,Check,packageIndex>=0 ? Path.GetFullPath(args[packageIndex+1]) : null,args.Contains("--terracotta-live"),args.Contains("--terracotta-download"));
+        Console.WriteLine($"ALL {count} TERRACOTTA CHECKS PASSED");return;
+    }
+    await TerracottaTests.RunAsync(root,Check,null,false);
     FolderAndWorldTests.Run(root, Check);
+    RemovalTests.Run(root, Check);
     RuntimeSettingsTests.Run(root, Check);
     JvmAndMemoryTests.Run(root, Check);
     await PlayerSkinTests.RunAsync(root, Check);
     await MicrosoftLoginTests.RunAsync(Check);
     await DownloadCenterTests.RunAsync(root, Check);
     await ContentDownloadTests.RunAsync(root, Check);
+    await ContentInstallationInspectorTests.RunAsync(root, Check);
     AppearanceTests.Run(root, Check);
     InstanceCatalogTests.Run(root, Check);
     MemoryCleanupTests.Run(root, Check);

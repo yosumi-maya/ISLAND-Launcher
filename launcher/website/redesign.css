@@ -1,0 +1,128 @@
+/* Product Design: selected island concept. Shared utilities remain in styles.css. */
+body[data-design="island"] { --ink: #183b38; --accent: #176b68; --accent-hover: #105652; }
+body[data-design="island"] .section-shell { width: min(1320px, calc(100% - 104px)); }
+body[data-design="island"] .site-header { position: relative; border: 0; background: #f5f7f7; }
+body[data-design="island"] .header-inner { width: min(1320px, calc(100% - 104px)); min-height: 100px; gap: 28px; }
+body[data-design="island"] .wordmark > img { display: none; }
+body[data-design="island"] .wordmark > span { display: flex; align-items: center; gap: 14px; font-size: 31px; letter-spacing: -.025em; }
+body[data-design="island"] .wordmark small { font-size: 15px; font-weight: 500; letter-spacing: 0; color: var(--ink); }
+body[data-design="island"] .main-nav { margin-left: auto; gap: 34px; }
+body[data-design="island"] .main-nav a { font-size: 15px; }
+body[data-design="island"] .header-actions { gap: 32px; }
+body[data-design="island"] .button { border-radius: 12px; padding: 18px 27px; font-size: 17px; font-weight: 600; }
+body[data-design="island"] .button-small { background: var(--accent); color: #fff; font-size: 15px; padding: 13px 22px; }
+body[data-design="island"] .button-small:hover { background: var(--accent-hover); }
+body[data-design="island"] .hero { position: relative; display: block; isolation: isolate; padding: 0; overflow: hidden; }
+.hero-scenery { position: absolute; z-index: -1; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; }
+.hero-inner { min-height: clamp(740px, 74vw, 980px); display: flex; align-items: center; padding-bottom: 100px; }
+body[data-design="island"] .hero-copy { width: 55%; padding: 0; }
+body[data-design="island"] .hero h1 { font-size: clamp(58px, 8.1vw, 112px); font-weight: 750; line-height: 1.23; letter-spacing: -.065em; color: #133633; }
+body[data-design="island"] .hero-description { font-size: 21px; line-height: 1.85; margin-top: 30px; color: #4c626b; }
+body[data-design="island"] .hero-actions { gap: 18px; margin-top: 38px; }
+body[data-design="island"] .button-quiet { border-color: #b8cdcf; background: #f5f7f799; }
+body[data-design="island"] .button-quiet:hover { background: #e4eeeb; }
+body[data-design="island"] .platform-note { font-size: 14px; margin-top: 24px; color: #607580; }
+body[data-design="island"] .showcase { position: relative; isolation: isolate; display: grid; grid-template-columns: .8fr 2fr; gap: 56px; align-items: center; margin-top: 18px; margin-bottom: 260px; }
+body[data-design="island"] .showcase::before { content: ''; position: absolute; z-index: -1; pointer-events: none; width: 100vw; height: 680px; left: 50%; bottom: -200px; transform: translateX(-50%); background: url('./assets/island-shore.webp') center bottom / cover no-repeat; }
+body[data-design="island"] .showcase-toolbar { display: flex; flex-direction: column; align-items: flex-start; gap: 28px; padding: 0; }
+body[data-design="island"] .showcase-toolbar h2 { font-size: clamp(32px, 4.2vw, 52px); font-weight: 750; line-height: 1.35; letter-spacing: -.045em; }
+body[data-design="island"] .showcase-toolbar p { margin: 0; font-size: 16px; line-height: 1.9; color: #60727c; }
+body[data-design="island"] .theme-options { padding: 5px; border-radius: 16px; gap: 2px; background: #e6edef; }
+body[data-design="island"] .theme-option { padding: 12px 20px; min-height: 48px; border-radius: 12px; font-size: 15px; }
+body[data-design="island"] .swatch { width: 12px; height: 12px; }
+.showcase-product { min-width: 0; }
+body[data-design="island"] .screenshot-stage { padding: 0; border-radius: 14px; border: 1px solid #d3e0de; background: #e8eeeb; box-shadow: 0 18px 48px -28px #416a6a66; }
+body[data-design="island"] .screenshot-button { border-radius: 0; }
+body[data-design="island"] .showcase-caption { font-size: 11px; color: #6c7e81; }
+body[data-design="island"] .zoom-label { opacity: 0; transition: opacity .18s; }
+body[data-design="island"] .screenshot-button:hover .zoom-label,
+body[data-design="island"] .screenshot-button:focus-visible .zoom-label,
+.appearance-preview:hover .zoom-label, .appearance-preview:focus-visible .zoom-label { opacity: 1; }
+body[data-design="island"] .feature-section { padding-bottom: 110px; }
+body[data-design="island"] .section-heading { gap: 36px; margin-bottom: 48px; }
+body[data-design="island"] h2 { font-weight: 700; }
+body[data-design="island"] .feature-layout { display: block; }
+body[data-design="island"] .feature-list { grid-template-columns: repeat(4, 1fr); gap: 36px; padding-top: 32px; border-top: 1px solid var(--line); }
+body[data-design="island"] .feature-list h3 { font-size: 19px; margin-bottom: 15px; }
+body[data-design="island"] .feature-list p { font-size: 14px; }
+body[data-design="island"] .appearance-section { background: #eaf0ef; padding-block: 80px; }
+body[data-design="island"] .appearance-layout { grid-template-columns: .9fr 1.5fr; gap: 65px; }
+.appearance-preview { position: relative; display: block; width: 100%; padding: 0; background: transparent; border-radius: 12px; box-shadow: 0 20px 40px -30px #224a4a88; }
+.appearance-preview > img { display: block; border-radius: 12px; width: 100%; }
+body[data-design="island"] .download-section { padding-block: 110px; }
+body[data-design="island"] .requirements { background: transparent; border: 0; border-left: 1px solid var(--line); border-radius: 0; padding-left: 42px; }
+body[data-design="island"] .services-section { padding-top: 50px; padding-bottom: 100px; }
+body[data-design="island"] .faq-section { padding-bottom: 110px; }
+body[data-design="island"] .site-footer { padding-block: 42px 30px; }
+html[lang="en"] body[data-design="island"] .hero h1 { font-size: clamp(54px, 6.5vw, 90px); letter-spacing: -.06em; }
+html[lang="en"] body[data-design="island"] .hero-description { font-size: 19px; max-width: 26em; }
+@media (max-width: 1150px) {
+  body[data-design="island"] .section-shell, body[data-design="island"] .header-inner { width: calc(100% - 80px); }
+  body[data-design="island"] .header-inner { gap: 20px; min-height: 88px; }
+  body[data-design="island"] .main-nav { gap: 24px; }
+  body[data-design="island"] .header-actions { gap: 20px; }
+  body[data-design="island"] .wordmark > span { font-size: 29px; gap: 10px; }
+  body[data-design="island"] .wordmark small { font-size: 14px; }
+  body[data-design="island"] .button-small { padding: 12px 18px; font-size: 14px; }
+  body[data-design="island"] .hero-description { font-size: 20px; }
+  body[data-design="island"] .hero-actions { gap: 14px; }
+  body[data-design="island"] .hero-actions .button { padding: 18px 24px; font-size: 18px; }
+  body[data-design="island"] .hero-actions .button-primary { min-width: 254px; }
+  body[data-design="island"] .hero-actions .button-quiet { min-width: 178px; }
+  body[data-design="island"] .showcase { grid-template-columns: .8fr 2fr; gap: 34px; }
+  body[data-design="island"] .feature-list { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 900px) and (min-width: 761px) {
+  body[data-design="island"] .header-actions .button-small { display: none; }
+  body[data-design="island"] .hero-copy { width: 60%; }
+  body[data-design="island"] .hero h1 { font-size: 63px; }
+  body[data-design="island"] .hero-description { font-size: 17px; }
+  body[data-design="island"] .showcase-toolbar h2 { font-size: 30px; }
+  body[data-design="island"] .theme-option { padding: 9px 14px; }
+}
+@media (max-width: 760px) {
+  body[data-design="island"] .section-shell { width: calc(100% - 40px); }
+  body[data-design="island"] .header-inner { width: calc(100% - 32px); min-height: 76px; gap: 6px; }
+  body[data-design="island"] .wordmark > span { font-size: 26px; display: block; }
+  body[data-design="island"] .wordmark small { font-size: 10px; line-height: 1.6; }
+  body[data-design="island"] .header-actions { gap: 2px; }
+  body[data-design="island"] .header-actions .button-small { padding: 11px 12px; font-size: 12px; }
+  body[data-design="island"] .main-nav { top: 76px; margin: 0; gap: 4px; }
+  body[data-design="island"] .hero-inner { min-height: 810px; display: block; padding-top: 42px; padding-bottom: 0; }
+  body[data-design="island"] .hero-copy { width: 100%; }
+  body[data-design="island"] .hero h1 { font-size: clamp(45px, 11vw, 72px); line-height: 1.25; letter-spacing: -.055em; }
+  body[data-design="island"] .hero-description { font-size: 15px; margin-top: 22px; line-height: 1.9; }
+  body[data-design="island"] .hero-actions { margin-top: 25px; gap: 12px; }
+  body[data-design="island"] .hero-actions .button { padding: 14px 17px; font-size: 14px; }
+  body[data-design="island"] .hero-actions .button-primary, body[data-design="island"] .hero-actions .button-quiet { min-width: 0; }
+  body[data-design="island"] .platform-note { margin-top: 18px; font-size: 11px; }
+  .hero-scenery { inset: auto 0 0; height: 450px; object-fit: cover; object-position: 72% center; }
+  body[data-design="island"] .showcase { display: flex; flex-direction: column; align-items: stretch; gap: 26px; margin-top: 14px; margin-bottom: 72px; }
+  body[data-design="island"] .showcase::before { height: 360px; bottom: -45px; }
+  body[data-design="island"] .showcase-toolbar { gap: 18px; }
+  body[data-design="island"] .showcase-toolbar h2 { font-size: 34px; }
+  body[data-design="island"] .showcase-toolbar p { font-size: 15px; max-width: 30em; }
+  body[data-design="island"] .theme-option { padding: 10px 20px; }
+  body[data-design="island"] .showcase-caption { font-size: 10px; }
+  body[data-design="island"] .feature-section { padding-bottom: 64px; }
+  body[data-design="island"] .feature-list { gap: 30px 24px; padding-top: 26px; }
+  body[data-design="island"] .feature-list h3 { font-size: 17px; }
+  body[data-design="island"] .feature-list p { font-size: 13px; }
+  body[data-design="island"] .appearance-layout { grid-template-columns: 1fr; gap: 30px; }
+  body[data-design="island"] .appearance-section { padding-block: 52px; }
+  body[data-design="island"] .download-section { padding-block: 64px; }
+  body[data-design="island"] .requirements { border-left: 0; border-top: 1px solid var(--line); padding: 28px 0 0; }
+  body[data-design="island"] .services-section { padding-block: 32px 60px; }
+  body[data-design="island"] .faq-section { padding-bottom: 65px; }
+  body[data-design="island"] .zoom-label { opacity: 1; font-size: 10px; padding: 4px 8px; right: 10px; bottom: 10px; }
+  html[lang="en"] body[data-design="island"] .hero h1 { font-size: clamp(43px, 10.5vw, 68px); }
+  html[lang="en"] body[data-design="island"] .hero-description { font-size: 15px; max-width: 29em; }
+  html[lang="en"] body[data-design="island"] .hero-inner { min-height: 1000px; }
+}
+@media (max-width: 380px) {
+  body[data-design="island"] .header-actions .button-small { display: none; }
+  body[data-design="island"] .feature-list { grid-template-columns: 1fr; }
+  body[data-design="island"] .hero-inner { min-height: 770px; }
+  html[lang="en"] body[data-design="island"] .hero-inner { min-height: 1100px; }
+  .hero-scenery { height: 410px; }
+}

@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Island.Core;
@@ -18,12 +18,12 @@ public sealed class AccountSkinWindow : FormWindow
     private byte[]? png;
     private bool busy, changed, closeAfterCancel;
     public AccountSkinWindow(Window owner, PlayerAccount account, Func<byte[]?, string, CancellationToken, Task> apply,
-        Func<CancellationToken, Task<PlayerAccount>>? synchronize = null, Func<string?>? picker = null)
+        Func<CancellationToken, Task<PlayerAccount>>? synchronize = null, Func<string?>? picker = null, Func<byte[]?>? configureCape = null)
         : base(owner, account.Name + " · 玩家皮肤", account.Microsoft
             ? "选择皮肤并保存，会上传至此 Microsoft 账号的 Minecraft Java 档案。"
             : "保存为此玩家的启动器皮肤与头像。离线游戏内显示需要额外的皮肤模组支持。", 780)
     {
-        png = account.SkinPng;
+        png = account.SkinPng; modelPreview.SetCape(account.CapePng);
         RenderOptions.SetBitmapScalingMode(avatar, BitmapScalingMode.NearestNeighbor);
         var preview = new Grid(); preview.ColumnDefinitions.Add(new ColumnDefinition()); preview.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(240) });
         var stage = new StackPanel(); stage.Children.Add(modelPreview);
@@ -79,6 +79,11 @@ public sealed class AccountSkinWindow : FormWindow
                 });
             });
             sync.Margin = new Thickness(0, 8, 0, 0); controls.Children.Add(sync);
+        }
+        if (configureCape is not null)
+        {
+            var capeButton = Button("切换正版披风…", (_, _) => { modelPreview.SetCape(configureCape()); });
+            capeButton.Margin = new Thickness(0, 8, 0, 0); controls.Children.Add(capeButton);
         }
         status.Style = (Style)FindResource("Hint"); Body.Children.Add(status);
         status.Text = png is null ? "尚未配置皮肤。支持 64 × 64 或旧版 64 × 32 PNG。" : "已保存的玩家皮肤，可更换或恢复默认。";

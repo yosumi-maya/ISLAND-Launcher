@@ -17,6 +17,7 @@ public sealed class GameFoldersWindow : FormWindow
         "为每个文件夹设置名称和版本隔离方式。自动检测会逐个版本判断使用根目录还是版本目录；切换设置不会移动游戏文件。", 660)
     {
         var list = new StackPanel();
+        var removers = new List<Button>();
         foreach (var draft in folders)
         {
             var body = new StackPanel();
@@ -37,9 +38,26 @@ public sealed class GameFoldersWindow : FormWindow
                 DisplayMemberPath = "Label", SelectedValuePath = "Value", SelectedValue = draft.Isolation, Tag = draft.Directory
             };
             Grid.SetColumn(isolation, 1); isolationRow.Children.Add(isolation); body.Children.Add(isolationRow);
-            list.Children.Add(new MaterialBorder { Area = SurfaceArea.Panels, Style = (Style)FindResource("Card"), Padding = new Thickness(14), Margin = new Thickness(0, 0, 0, 10), Child = body });
+            var surface = new MaterialBorder { Area = SurfaceArea.Panels, Style = (Style)FindResource("Card"), Padding = new Thickness(14), Margin = new Thickness(0, 0, 0, 10), Child = body };
+            if (!importing)
+            {
+                var remove = Button("移除目录", (_, _) =>
+                {
+                    if (rows.Count <= 1) { error.Text = "至少保留一个游戏目录。请先添加其他目录。"; return; }
+                    rows.RemoveAll(row => GameFolder.SamePath(row.Draft.Directory, draft.Directory));
+                    list.Children.Remove(surface);
+                    error.Text = "保存后移除目录记录，磁盘文件不会删除。";
+                    foreach (var button in removers) button.IsEnabled = rows.Count > 1;
+                });
+                remove.Name = "RemoveGameFolderButton"; remove.Tag = draft.Directory;
+                remove.ToolTip = "仅从启动器移除，保留磁盘上的所有文件；至少保留一个游戏目录。";
+                remove.HorizontalAlignment = HorizontalAlignment.Right; remove.Margin = new Thickness(0, 10, 0, 0);
+                body.Children.Add(remove); removers.Add(remove);
+            }
+            list.Children.Add(surface);
             rows.Add((draft, name, isolation));
         }
+        foreach (var button in removers) button.IsEnabled = rows.Count > 1;
         Body.Children.Add(new ScrollViewer { Content = list, MaxHeight = 380, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         Body.Children.Add(error);
         var cancel = Button("取消", (_, _) => DialogResult = false); cancel.IsCancel = true; Actions.Children.Add(cancel);

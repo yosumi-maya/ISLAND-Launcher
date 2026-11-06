@@ -18,6 +18,7 @@ internal sealed record PackSearchCard(CatalogProject Project)
         .Distinct(StringComparer.OrdinalIgnoreCase).Take(3).Select(c => CategoryNames.GetValueOrDefault(c, c)).ToArray();
     public string Compatibility => string.Join(" / ", Project.Loaders) + (Project.Versions.Count > 0 ? "  " + string.Join(", ", Project.Versions.TakeLast(3)) : "");
     public string FullCompatibility => string.Join(" / ", Project.Loaders) + "  " + string.Join(", ", Project.Versions);
+    public string TagSummary => string.Join("  ", Tags);
     public string Downloads => Project.Downloads >= 10000 ? $"{Project.Downloads / 10000:0.#} 万" : $"{Project.Downloads:N0}";
     public string Updated
     {

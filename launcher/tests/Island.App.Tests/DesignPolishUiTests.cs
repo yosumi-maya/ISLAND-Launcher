@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -49,6 +49,10 @@ internal static class DesignPolishUiTests
                 {
                     window.Width = size.Item1; window.Height = size.Item2;
                     Find<RadioButton>(window, "NavLibrary").IsChecked = true; window.UpdateLayout(); await Task.Delay(120);
+                    var surface = Find<MaterialBorder>(window, "WindowSurface");
+                    var shell = Find<Grid>(window, "ShellModules");
+                    var bounds = shell.TransformToAncestor(surface).TransformBounds(new Rect(shell.RenderSize));
+                    Console.WriteLine($"FRAME_GAPS {name} {size.Item1}: left={bounds.Left:0.0}, top={bounds.Top:0.0}, right={surface.ActualWidth-bounds.Right:0.0}, bottom={surface.ActualHeight-bounds.Bottom:0.0}");
                     capture(window, "Design-" + name + "-Library-" + (int)size.Item1);
                     Find<RadioButton>(window, "NavDownloads").IsChecked = true;
                     var center = Find<DownloadCenter>(window, "DownloadCenterView"); Find<RadioButton>(center, "PacksTab").IsChecked = true;
@@ -58,10 +62,10 @@ internal static class DesignPolishUiTests
             }
             var modal = new FormWindow(window, "界面提示", "弹窗、下拉菜单和表单沿用所选深色配色。") { ShowInTaskbar = false, Left = -16000, WindowStartupLocation = WindowStartupLocation.Manual };
             modal.Show(); modal.UpdateLayout(); capture(modal, "Design-Night-Dialog");
-            check(ThemeManager.Contrast(((SolidColorBrush)modal.Foreground).Color, ((SolidColorBrush)modal.Background).Color) >= 4.5,
+            check(ThemeManager.Contrast(((SolidColorBrush)modal.Foreground).Color, ((SolidColorBrush)((Border)modal.Content).Background).Color) >= 4.5,
                 "Dialogs inherit readable dark-theme foreground and background"); modal.Close();
-            check(Find<Button>(window, "LaunchButton").Template.FindName("KeyboardRing", Find<Button>(window, "LaunchButton")) is Border,
-                "Primary buttons provide an independent keyboard focus ring without changing padding");
+            check(Find<Button>(window, "LaunchButton").Template.FindName("KeyboardRing", Find<Button>(window, "LaunchButton")) is null,
+                "Primary buttons no longer add an outer keyboard focus frame");
         }
         finally { await Find<DownloadCenter>(window, "DownloadCenterView").ShutdownAsync(); window.Close(); }
         var reopened = new MainWindow(store, javaRuntimes: cache, downloadService: new DownloadCenterUiTests.Service())

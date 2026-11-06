@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const website = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const root = path.join(website, "dist");
 const port = Number(process.argv[2] || 4183);
-const types = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".png": "image/png", ".svg": "image/svg+xml", ".txt": "text/plain; charset=utf-8" };
+const types = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".png": "image/png", ".webp": "image/webp", ".svg": "image/svg+xml", ".txt": "text/plain; charset=utf-8" };
 const server = http.createServer(async (request, response) => {
   try {
     let pathname = decodeURIComponent(new URL(request.url, "http://127.0.0.1").pathname);

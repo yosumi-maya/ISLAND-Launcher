@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -49,7 +49,7 @@ public partial class App : Application
                     foreach (var size in new[] { (1240d, 830d), (1020d, 700d) })
                     {
                         window.Width = size.Item1; window.Height = size.Item2;
-                        foreach (var page in new[] { "NavLibrary", "NavAccounts", "NavSettings", "NavLogs" })
+                        foreach (var page in new[] { "NavLibrary", "NavAccounts", "NavSettings", "NavLogs", "NavMultiplayer" })
                         {
                             ((RadioButton)window.FindName(page)).IsChecked = true; window.UpdateLayout(); await Task.Delay(120);
                             SaveCapture((FrameworkElement)window.Content, Path.Combine(capturePath, page + "-" + (int)size.Item1 + ".png"));

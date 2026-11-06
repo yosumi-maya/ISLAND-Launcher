@@ -13,12 +13,15 @@ public sealed class ModpackInstaller(AppSettings settings, DownloadClient networ
     {
         var extension = Path.GetExtension(archivePath).ToLowerInvariant();
         if (extension is not ".zip" and not ".mrpack") throw new NotSupportedException("请拖入 .zip 或 .mrpack 整合包；RAR / 7z 请先解压并重新压缩为 ZIP。");
+        token.ThrowIfCancellationRequested();
         using var zip = ZipFile.OpenRead(archivePath);
         if (zip.Entries.Count > 200000 || zip.Entries.Sum(e => e.Length) > MaximumExpandedSize) throw new InvalidDataException("整合包文件数或解压体积过大。");
+        var validationRoot = Path.GetTempPath();
         foreach (var entry in zip.Entries)
         {
+            token.ThrowIfCancellationRequested();
             // Validate every entry, even ignored server overrides, before installation starts.
-            if (entry.FullName.TrimEnd('/').Length > 0) _ = SafePaths.Under(Path.GetTempPath(), entry.FullName.TrimEnd('/'));
+            if (entry.FullName.TrimEnd('/').Length > 0) _ = SafePaths.ResolveUnder(validationRoot, entry.FullName.TrimEnd('/'));
             if ((entry.ExternalAttributes >> 16 & 0xF000) == 0xA000) throw new InvalidDataException("整合包不能包含符号链接。");
         }
         var manifestNames = new[] { "modrinth.index.json", "manifest.json", "mmc-pack.json", "mcbbs.packmeta" };

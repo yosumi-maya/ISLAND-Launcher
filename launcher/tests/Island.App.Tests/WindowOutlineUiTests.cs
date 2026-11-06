@@ -35,7 +35,8 @@ internal static class WindowOutlineUiTests
         byte[] pixel = new byte[4];
         bool TransparentAt(int x, int y) { image.CopyPixels(new Int32Rect(x, y, 1, 1), pixel, 4, 0); return pixel[3] == 0; }
         check(TransparentAt(0, 0) && TransparentAt(image.PixelWidth - 1, 0) && TransparentAt(0, image.PixelHeight - 1)
-            && TransparentAt(image.PixelWidth - 1, image.PixelHeight - 1) && surface.Clip is RectangleGeometry { RadiusX: 14, RadiusY: 14 },
+            && TransparentAt(image.PixelWidth - 1, image.PixelHeight - 1) && surface.Clip is RectangleGeometry { RadiusX: 8, RadiusY: 8 }
+            && surface.CornerRadius == new CornerRadius(8),
             $"All four visual corners are clipped without an opaque square behind them at {(int)window.ActualWidth}px");
         var handle = new WindowInteropHelper(window).Handle; GetWindowRect(handle, out var bounds);
         var dpi = VisualTreeHelper.GetDpi(window); var inset = (int)Math.Ceiling(5 * dpi.DpiScaleX);

@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -71,6 +71,21 @@ public sealed class LauncherState
         if (current is not null) current.LastSelectedInstanceId = SelectedInstanceId;
         SelectedGameFolderId = target.Id; GameDirectory = target.Directory; SelectedInstanceId = target.LastSelectedInstanceId;
     }
+    public void RemoveGameFolder(string id)
+    {
+        var folder = GameFolders.FirstOrDefault(item => item.Id == id) ?? throw new ArgumentException("游戏目录不在列表中。");
+        if (GameFolders.Count <= 1) throw new InvalidOperationException("至少保留一个游戏目录。请先添加其他目录。");
+        if (SelectedGameFolderId == id) SelectGameFolder(GameFolders.First(item => item.Id != id).Id);
+        GameFolders.Remove(folder);
+    }
+    public void ForgetInstance(string directory, string id)
+    {
+        var key = Path.GetFullPath(directory).TrimEnd('\\', '/').ToUpperInvariant() + "|" + id;
+        Instances.Remove(key);
+        var folder = GameFolders.FirstOrDefault(item => GameFolder.SamePath(item.Directory, directory));
+        if (folder?.LastSelectedInstanceId == id) folder.LastSelectedInstanceId = null;
+        if (GameFolder.SamePath(GameDirectory, directory) && SelectedInstanceId == id) SelectedInstanceId = null;
+    }
     public void RememberInstance(string id, string? directory = null)
     {
         directory ??= GameDirectory;
@@ -129,6 +144,8 @@ public sealed class GameFolder
 public sealed class InstancePreferences
 {
     public string DisplayName { get; set; } = "";
+    public string IconKey { get; set; } = "";
+    public byte[]? IconPng { get; set; }
     public bool Favorite { get; set; }
     public DateTimeOffset? LastPlayed { get; set; }
     public double PlayedMinutes { get; set; }
@@ -153,6 +170,10 @@ public sealed class PlayerAccount
     public byte[]? SkinPng { get; set; }
     public string SkinUrl { get; set; } = "";
     public string SkinVariant { get; set; } = "classic";
+    public List<PlayerCape> Capes { get; set; } = [];
+    public bool CapesLoaded { get; set; }
+    public string ActiveCapeId { get; set; } = "";
+    public byte[]? CapePng { get; set; }
     public string Label => Name + (Microsoft ? "  ·  Microsoft" : "  ·  本地离线");
     public static PlayerAccount Offline(string name)
     {

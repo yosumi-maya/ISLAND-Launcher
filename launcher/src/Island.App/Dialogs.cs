@@ -1,7 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.Windows.Shell;
+using System.Windows.Input;
+using System.Windows.Controls.Primitives;
 using BlockDock.Core;
 using Island.Core;
 
@@ -19,16 +20,22 @@ public class FormWindow : Window
         Style = (Style)FindResource(typeof(Window));
         WindowStartupLocation = Owner is null ? WindowStartupLocation.CenterScreen : WindowStartupLocation.CenterOwner;
         ResizeMode = ResizeMode.NoResize; WindowStyle = WindowStyle.None; ShowInTaskbar = false;
-        WindowChrome.SetWindowChrome(this, new WindowChrome { CaptionHeight = 44, ResizeBorderThickness = new Thickness(0), GlassFrameThickness = new Thickness(0) });
-        SetResourceReference(BackgroundProperty, "WindowBackground");
+        // Own the fixed-size dialog frame completely; native chrome can add a bottom hairline.
+        AllowsTransparency = true; Background = Brushes.Transparent;
         Body.Margin = new Thickness(28, 8, 28, 26);
         Body.Children.Add(new TextBlock { Text = title, FontSize = 23, FontWeight = FontWeights.SemiBold });
         Body.Children.Add(new TextBlock { Text = description, TextWrapping = TextWrapping.Wrap, Style = (Style)FindResource("Hint"), Margin = new Thickness(0, 10, 0, 18) });
         var root = layout; root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(44) }); root.RowDefinitions.Add(new RowDefinition());
-        var heading = new Grid { Margin = new Thickness(18, 0, 8, 0) };
+        var heading = new Grid { Margin = new Thickness(18, 0, 8, 0), Background = Brushes.Transparent };
+        heading.MouseLeftButtonDown += (_, e) =>
+        {
+            for (var current = e.OriginalSource as DependencyObject; current is not null && current != heading; current = current is Visual ? VisualTreeHelper.GetParent(current) : LogicalTreeHelper.GetParent(current))
+                if (current is ButtonBase) return;
+            if (e.ButtonState == MouseButtonState.Pressed && e.ClickCount == 1) { DragMove(); e.Handled = true; }
+        };
         var caption = new TextBlock { Text = "岛屿  /  ISLAND", FontSize = 10, VerticalAlignment = VerticalAlignment.Center }; caption.SetResourceReference(TextBlock.ForegroundProperty, "Muted"); heading.Children.Add(caption);
         var close = new Button { Content = "×", FontSize = 20, Width = 34, Height = 30, Padding = new Thickness(0), HorizontalAlignment = HorizontalAlignment.Right, Style = (Style)FindResource("Quiet"), ToolTip = "关闭", IsCancel = true };
-        close.Click += (_, _) => Close(); WindowChrome.SetIsHitTestVisibleInChrome(close, true); heading.Children.Add(close); root.Children.Add(heading);
+        close.Click += (_, _) => Close(); heading.Children.Add(close); root.Children.Add(heading);
         var scroll = new ScrollViewer { Content = Body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }; Grid.SetRow(scroll, 1); root.Children.Add(scroll);
         var frame = new Border { BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(12), Child = root };
         frame.SetResourceReference(Border.BackgroundProperty, "WindowBackground"); frame.SetResourceReference(Border.BorderBrushProperty, "Line"); Content = frame;
@@ -50,13 +57,32 @@ public class FormWindow : Window
         var button = new Button { Content = text, Margin = new Thickness(8, 0, 0, 0), Style = (Style)FindResource(primary ? "Primary" : typeof(Button)) };
         button.Click += clicked; return button;
     }
-    public static string? Prompt(Window owner, string title, string description, string value = "")
+    public const string MinecraftPurchaseUrl = "https://www.minecraft.net/zh-hans/store/minecraft-java-bedrock-edition-pc";
+    protected void AddMinecraftPurchaseLink(Action<string>? open = null)
+    {
+        KeepActionsVisible(); layout.Children.Remove(Actions);
+        var footer = new Grid { Margin = new Thickness(28, 12, 28, 20) };
+        footer.ColumnDefinitions.Add(new ColumnDefinition());
+        footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var purchase = Button("购买 Minecraft  ↗", (_, _) =>
+        {
+            try { (open ?? MainWindow.OpenPath)(MinecraftPurchaseUrl); }
+            catch (Exception ex) { MessageWindow.Inform(this, ex.Message, "无法打开购买页面"); }
+        });
+        purchase.Name = "PurchaseMinecraftButton"; purchase.Style = (Style)FindResource("Quiet");
+        purchase.FontSize = 11; purchase.Padding = new Thickness(0, 8, 12, 8); purchase.Margin = new Thickness(0);
+        purchase.HorizontalAlignment = HorizontalAlignment.Left; purchase.ToolTip = "前往 Minecraft 官方购买页面";
+        footer.Children.Add(purchase); Actions.Margin = new Thickness(0); Grid.SetColumn(Actions, 1); footer.Children.Add(Actions);
+        Grid.SetRow(footer, 2); layout.Children.Add(footer);
+    }
+    public static string? Prompt(Window owner, string title, string description, string value = "", bool showMinecraftPurchase = false)
     {
         var dialog = new FormWindow(owner, title, description);
         var input = new TextBox { Text = value }; dialog.Body.Children.Add(input);
         dialog.Actions.Children.Add(dialog.Button("取消", (_, _) => dialog.DialogResult = false));
         var confirm = dialog.Button("确定", (_, _) => dialog.DialogResult = true, true); confirm.IsDefault = true;
         dialog.Actions.Children.Add(confirm); dialog.Body.Children.Add(dialog.Actions);
+        if (showMinecraftPurchase) dialog.AddMinecraftPurchaseLink();
         dialog.Loaded += (_, _) => { input.Focus(); input.SelectAll(); };
         return dialog.ShowDialog() == true ? input.Text.Trim() : null;
     }
@@ -158,23 +184,42 @@ public sealed class NewInstanceWindow : FormWindow
 public sealed class DeviceLoginWindow : FormWindow
 {
     public AuthResult? Result { get; private set; }
-    public DeviceLoginWindow(Window owner, MicrosoftAuth auth, string clientId, DeviceLogin device, CancellationToken external) : base(owner, "登录 Microsoft", "在浏览器中完成官方登录。启动器不会收集你的密码。")
+    public DeviceLoginWindow(Window owner, MicrosoftAuth auth, string clientId, DeviceLogin device, CancellationToken external, bool openBrowserOnLoad = false)
+        : this(owner, device, token => auth.CompleteAsync(clientId, device, token), external, openBrowserOnLoad: openBrowserOnLoad) { }
+    internal DeviceLoginWindow(Window owner, DeviceLogin device, Func<CancellationToken, Task<AuthResult>> signIn, CancellationToken external, Action<string>? openBrowser = null, bool openBrowserOnLoad = false)
+        : base(owner, "登录 Microsoft", "在浏览器中完成官方登录。启动器不会收集你的密码。")
     {
         var code = new TextBox { Text = device.UserCode, IsReadOnly = true, FontSize = 29, FontFamily = new FontFamily("Consolas"), HorizontalContentAlignment = HorizontalAlignment.Center };
         Body.Children.Add(code);
         var status = new TextBlock { Text = "复制设备码，然后打开 Microsoft 登录页。", Margin = new Thickness(0, 15, 0, 0), TextWrapping = TextWrapping.Wrap };
         Body.Children.Add(status);
         Actions.Children.Add(Button("复制设备码", (_, _) => { Clipboard.SetText(device.UserCode); status.Text = "设备码已复制。"; }));
-        Actions.Children.Add(Button("打开登录页  ↗", (_, _) => MainWindow.OpenPath(device.VerificationUrl), true));
+        void OpenLoginPage()
+        {
+            try { (openBrowser ?? MainWindow.OpenPath)(device.VerificationUrl); status.Text = "已打开 Microsoft 登录页，请输入上方设备码并完成授权。"; }
+            catch { status.Text = "无法打开系统浏览器，请复制设备码并手动访问：" + device.VerificationUrl; }
+        }
+        Actions.Children.Add(Button("打开登录页  ↗", (_, _) => OpenLoginPage(), true));
+        Actions.Children.Add(Button("取消", (_, _) => Close()));
         Body.Children.Add(Actions);
+        AddMinecraftPurchaseLink(openBrowser);
         var lifetime = CancellationTokenSource.CreateLinkedTokenSource(external);
         var closed = false;
+        var cancellation = external.Register(() => Dispatcher.BeginInvoke(new Action(() => { if (!closed) Close(); })));
         Loaded += async (_, _) =>
         {
-            try { var result = await auth.CompleteAsync(clientId, device, lifetime.Token); lifetime.Token.ThrowIfCancellationRequested(); if (!closed) { Result = result; DialogResult = true; } }
+            try
+            {
+                lifetime.Token.ThrowIfCancellationRequested();
+                if (openBrowserOnLoad) OpenLoginPage();
+                var pending = signIn(lifetime.Token);
+                _ = pending.ContinueWith(task => { _ = task.Exception; }, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+                var result = await pending.WaitAsync(lifetime.Token);
+                lifetime.Token.ThrowIfCancellationRequested(); if (!closed) { Result = result; DialogResult = true; }
+            }
             catch (OperationCanceledException) { }
             catch (Exception ex) { if (!closed) status.Text = ex.Message + "  关闭窗口后可重试。"; }
         };
-        Closed += (_, _) => { closed = true; lifetime.Cancel(); };
+        Closed += (_, _) => { closed = true; cancellation.Dispose(); lifetime.Cancel(); };
     }
 }

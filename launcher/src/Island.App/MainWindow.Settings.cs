@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using BlockDock.Core;
 using Island.Core;
@@ -8,6 +8,11 @@ namespace Island.App;
 
 public partial class MainWindow
 {
+    private void OpenGithubDownloads(object sender, RoutedEventArgs e)
+    {
+        try { OpenPath("https://github.com/yosumi-maya/ISLAND-Launcher/releases"); }
+        catch (Exception ex) { Report(ex); }
+    }
     private void OpenAccounts(object sender, RoutedEventArgs e) => NavAccounts.IsChecked = true;
     private void ReloadAccounts()
     {
@@ -20,13 +25,16 @@ public partial class MainWindow
         SidebarAccountButton.ToolTip = active is null ? "添加或管理玩家账号" : active.Name + " · " + SidebarAccountType.Text;
         SidebarAvatar.Source = SkinImages.Avatar(active?.SkinPng);
         SidebarDoll.SetSkin(active?.SkinPng, active?.SkinVariant ?? "classic");
+        SidebarDoll.SetCape(active?.CapePng);
+        foreach (var item in state.Accounts.Where(a => a.Microsoft).ToArray()) _ = LoadAccountCapeAsync(item);
         appearancePreview?.SetSkin(active?.SkinPng, active?.SkinVariant ?? "classic");
+        appearancePreview?.SetCape(active?.CapePng);
         foreach (var account in state.Accounts.Where(a => a.Microsoft && a.SkinPng is null && a.SkinUrl.Length > 0).ToArray())
             _ = LoadAccountSkinAsync(account);
     }
     private void AddOffline(object sender, RoutedEventArgs e)
     {
-        var name = FormWindow.Prompt(this, "添加本地玩家", "用于离线单人游戏及支持离线登录的服务器。\n正版在线服务器需要 Microsoft 账号。\n\n玩家名：3–16 位英文字母、数字或下划线。", "Player");
+        var name = FormWindow.Prompt(this, "添加本地玩家", "用于离线单人游戏及支持离线登录的服务器。\n正版在线服务器需要 Microsoft 账号。\n\n玩家名：3–16 位英文字母、数字或下划线。", "Player", showMinecraftPurchase: true);
         if (name is null) return;
         try
         {
@@ -49,8 +57,8 @@ public partial class MainWindow
             var result = browser.Result;
             if (browser.UseDeviceCode)
             {
-                var device = await auth.BeginAsync(clientId, token);
-                var dialog = new DeviceLoginWindow(this, auth, clientId, device, token);
+                var device = await auth.BeginAsync(clientId, token).WaitAsync(token);
+                var dialog = new DeviceLoginWindow(this, auth, clientId, device, token, openBrowserOnLoad: true);
                 if (dialog.ShowDialog() != true) return;
                 result = dialog.Result;
             }
@@ -86,11 +94,6 @@ public partial class MainWindow
             store.Save(state); ReloadAccounts();
         }
         catch (Exception ex) { Report(ex); }
-    }
-    private void BrowseRoot(object sender, RoutedEventArgs e)
-    {
-        var dialog = new OpenFolderDialog { Title = "选择游戏根目录", Multiselect = false };
-        if (dialog.ShowDialog(this) == true) RootBox.Text = dialog.FolderName;
     }
     private void BrowseJava(object sender, RoutedEventArgs e)
     {
@@ -153,10 +156,6 @@ public partial class MainWindow
         if (operation is not null || game is not null) { Notice("请等待任务或游戏结束后再保存运行设置。"); return; }
         try
         {
-            var root = RootBox.Text.Trim();
-            if (!Path.IsPathFullyQualified(root)) throw new ArgumentException("游戏目录需要是完整的绝对路径。");
-            root = Path.GetFullPath(root);
-            if (File.Exists(root)) throw new ArgumentException("游戏目录不能是一个文件。");
             var memory = GlobalMemoryEditor.ManualMemoryMb;
             var java = ReadJavaValue();
             if (java.Length > 0 && !File.Exists(java)) throw new ArgumentException("Java 路径不存在。请重新选择，或留空使用自动选择。");
@@ -164,7 +163,6 @@ public partial class MainWindow
             var themeColor = AppearanceSettings.NormalizeColor(ThemeColorBox.Text);
             if (!GlobalMemoryEditor.Automatic && jvm.InitialMemoryMb > memory) throw new ArgumentException("初始堆内存不能大于最大游戏内存。");
             var appearance = BackgroundImages.Persist(ReadAppearance(), store.DirectoryPath);
-            var changedDirectory = !GameFolder.SamePath(state.GameDirectory, root);
             var previousAppearance = state.Appearance; var previousTheme = state.ThemeColor;
             var previousCleanup = state.CleanMemoryBeforeLaunch;
             state.MemoryMb = memory; state.JavaPath = java;
@@ -175,14 +173,12 @@ public partial class MainWindow
             state.DownloadParallelDownloads = DownloadParallelBox.SelectedItem is int parallel ? parallel : 8;
             try
             {
-                if (changedDirectory) ActivateGameFolder(state.AddGameFolder(root, GameFolder.SuggestName(root)).Id);
-                else store.Save(state);
+                store.Save(state);
             }
             catch { state.Appearance = previousAppearance; state.ThemeColor = previousTheme; state.CleanMemoryBeforeLaunch = previousCleanup; throw; }
             appearanceTimer.Stop(); ApplySavedAppearance(); UpdateThemeButtons(); appearanceEditor?.Load(appearance); RefreshAppearancePreview();
-            if (!changedDirectory) ReloadLibrary();
+            ReloadLibrary();
             StatusLabel.Text = "●  设置已保存";
-            QuickAppearanceStatus.Text = "配色与纸娃娃显示设置已应用并保存。";
         }
         catch (Exception ex) { Report(ex); }
     }

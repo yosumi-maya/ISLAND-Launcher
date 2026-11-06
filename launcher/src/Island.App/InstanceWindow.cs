@@ -1,5 +1,6 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using BlockDock.Core;
 using Island.Core;
 using Microsoft.Win32;
@@ -31,6 +32,32 @@ public sealed class InstanceWindow : FormWindow
             button.Margin = new Thickness(0, 0, 8, 8); folders.Children.Add(button);
         }
         Body.Children.Add(folders);
+        Label("基本设置");
+        var iconKey = card.Preferences.IconKey; var iconPng = card.Preferences.IconPng;
+        var iconPreview = new Image { Name = "InstanceIconPreview", Source = card.Icon, Width=32,Height=32,Stretch=Stretch.Uniform,Margin=new Thickness(12,0,12,0) };
+        RenderOptions.SetBitmapScalingMode(iconPreview, BitmapScalingMode.NearestNeighbor);
+        var iconRow=new Grid { Margin=new Thickness(16,10,10,10),MinHeight=36 };
+        iconRow.ColumnDefinitions.Add(new ColumnDefinition());
+        for(var column=0;column<3;column++) iconRow.ColumnDefinitions.Add(new ColumnDefinition { Width=GridLength.Auto });
+        iconRow.Children.Add(new TextBlock { Text="游戏图标",VerticalAlignment=VerticalAlignment.Center }); Grid.SetColumn(iconPreview,1); iconRow.Children.Add(iconPreview);
+        var editIcon=Button("\uE70F",(_,_) => Try(() =>
+        {
+            var chooser=new InstanceIconWindow(this,iconKey,iconPng);
+            if(chooser.ShowDialog()!=true) return;
+            iconKey=chooser.IconKey; iconPng=chooser.IconPng;
+            iconPreview.Source=iconPng is not null ? InstanceIcons.Decode(iconPng) : InstanceIcons.Contains(iconKey) ? InstanceIcons.Builtin(iconKey) : new InstanceCard(card.Instance,new InstancePreferences()).Icon;
+        }));
+        editIcon.Name="EditInstanceIconButton"; editIcon.FontFamily=new FontFamily("Segoe MDL2 Assets"); editIcon.ToolTip="更换游戏图标";
+        System.Windows.Automation.AutomationProperties.SetName(editIcon,"更换游戏图标"); Grid.SetColumn(editIcon,2); iconRow.Children.Add(editIcon);
+        var resetIcon=Button("\uE777",(_,_) =>
+        {
+            iconKey=""; iconPng=null;
+            iconPreview.Source=new InstanceCard(card.Instance,new InstancePreferences()).Icon;
+        });
+        resetIcon.Name="ResetInstanceIconButton"; resetIcon.FontFamily=new FontFamily("Segoe MDL2 Assets"); resetIcon.ToolTip="恢复默认图标";
+        System.Windows.Automation.AutomationProperties.SetName(resetIcon,"恢复默认图标"); Grid.SetColumn(resetIcon,3); iconRow.Children.Add(resetIcon);
+        var iconSurface=new Border { Child=iconRow,CornerRadius=new CornerRadius(9),BorderThickness=new Thickness(1),Margin=new Thickness(0,0,0,8) };
+        iconSurface.SetResourceReference(Border.BackgroundProperty,"Surface"); iconSurface.SetResourceReference(Border.BorderBrushProperty,"Line"); Body.Children.Add(iconSurface);
         var fields = new Grid { Margin = new Thickness(0, 8, 0, 0) };
         fields.ColumnDefinitions.Add(new ColumnDefinition());
         var left = new StackPanel();
@@ -39,7 +66,11 @@ public sealed class InstanceWindow : FormWindow
         Body.Children.Add(fields);
         var independent = new CheckBox { Name = "IndependentRuntimeBox", Content = "使用独立运行设置（关闭时沿用全局设置）", IsChecked = card.Preferences.HasIndependentSettings, Margin = new Thickness(0, 16, 0, 12) }; Body.Children.Add(independent);
         var runtimePanel = new StackPanel(); Body.Children.Add(runtimePanel);
-        runtimePanel.Children.Add(new TextBlock { Text = "此版本使用的 Java", Margin = new Thickness(0, 0, 0, 8) });
+        var settingsGroup = new Border { CornerRadius = new CornerRadius(9), BorderThickness = new Thickness(1), ClipToBounds = true };
+        settingsGroup.SetResourceReference(Border.BackgroundProperty, "Surface"); settingsGroup.SetResourceReference(Border.BorderBrushProperty, "Line");
+        var rows = new StackPanel(); settingsGroup.Child = rows; runtimePanel.Children.Add(settingsGroup);
+        var javaEditor = new StackPanel();
+        var javaSetting = new InstanceSettingRow("游戏 Java", javaEditor) { Name = "InstanceJavaSetting" }; rows.Children.Add(javaSetting);
         var javaRow = new Grid(); javaRow.ColumnDefinitions.Add(new ColumnDefinition());
         javaRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); javaRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var choices = new[] { new JavaChoice(null, "沿用全局设置"), new JavaChoice("", "自动选择（按此版本要求）") };
@@ -92,17 +123,28 @@ public sealed class InstanceWindow : FormWindow
         var detectJava = Button("检测", async (sender, _) => await RefreshJava(true, (Button)sender));
         Loaded += async (_, _) => await RefreshJava(false, detectJava);
         Grid.SetColumn(detectJava, 2); javaRow.Children.Add(detectJava);
-        runtimePanel.Children.Add(javaRow); runtimePanel.Children.Add(javaStatus);
-        var memory = new MemoryAllocationEditor { Name = "InstanceMemoryEditor", Margin = new Thickness(0, 14, 0, 0) };
-        memory.Load(effective.AutoMemory, effective.MemoryMb, card.RuntimeDirectory); runtimePanel.Children.Add(memory);
-        var jvmEditor = new JvmSettingsEditor { Visibility = Visibility.Collapsed, Margin = new Thickness(0, 12, 0, 0) }; jvmEditor.Load(effective.Jvm);
-        var expandJvm = Button("Java 虚拟机设置  ▸", (_, _) =>
+        javaEditor.Children.Add(javaRow); javaEditor.Children.Add(javaStatus);
+        var memory = new MemoryAllocationEditor { Name = "InstanceMemoryEditor" };
+        memory.Load(effective.AutoMemory, effective.MemoryMb, card.RuntimeDirectory);
+        var memorySetting = new InstanceSettingRow("游戏内存", memory) { Name = "InstanceMemorySetting" }; rows.Children.Add(memorySetting);
+        var jvmEditor = new JvmSettingsEditor(); jvmEditor.Load(effective.Jvm);
+        var advancedSetting = new InstanceSettingRow("高级选项", jvmEditor, "虚拟机与游戏参数、启动前命令、兼容性与显卡设置") { Name = "InstanceAdvancedSetting", Summary = "按需调整" }; rows.Children.Add(advancedSetting);
+        void UpdateSummaries()
         {
-            jvmEditor.Visibility = jvmEditor.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
-        }); expandJvm.HorizontalAlignment = HorizontalAlignment.Left; expandJvm.Margin = new Thickness(0, 12, 0, 0); runtimePanel.Children.Add(expandJvm); runtimePanel.Children.Add(jvmEditor);
+            var inherited = independent.IsChecked != true;
+            var path = inherited ? state.JavaPath : ReadJava();
+            javaSetting.Summary = (inherited ? "全局 · " : "") + (path is null ? "沿用全局设置" : path.Length == 0 ? "自动选择 Java" : path);
+            memorySetting.Summary = (inherited ? "全局 · " : "") + ((inherited ? state.AutoMemory : memory.Automatic) ? "自动分配内存" : $"{(inherited ? state.MemoryMb : memory.ManualMemoryMb) / 1024d:0.0} GB");
+        }
+        java.SelectionChanged += (_, _) => UpdateSummaries();
+        java.AddHandler(TextBox.TextChangedEvent, new TextChangedEventHandler((_, _) => UpdateSummaries()));
+        memory.AutomaticOption.Checked += (_, _) => UpdateSummaries(); memory.CustomOption.Checked += (_, _) => UpdateSummaries();
+        memory.MemorySlider.ValueChanged += (_, _) => UpdateSummaries();
         void UpdateRuntimeControls()
         {
-            runtimePanel.IsEnabled = independent.IsChecked == true;
+            var enabled = independent.IsChecked == true;
+            javaEditor.IsEnabled = memory.IsEnabled = jvmEditor.IsEnabled = enabled;
+            UpdateSummaries();
         }
         independent.Checked += (_, _) => UpdateRuntimeControls(); independent.Unchecked += (_, _) => UpdateRuntimeControls();
         UpdateRuntimeControls();
@@ -112,6 +154,15 @@ public sealed class InstanceWindow : FormWindow
         Body.Children.Add(modSummary);
         var manageMods = Button("管理模组", (_, _) => Try(() => { new ModManagerWindow(this, card).ShowDialog(); ReloadMods(); }));
         manageMods.HorizontalAlignment = HorizontalAlignment.Left; manageMods.Margin = new Thickness(0); Body.Children.Add(manageMods); Body.Children.Add(status);
+        if (owner is MainWindow launcher)
+        {
+            var deletion = new StackPanel { Margin = new Thickness(0, 22, 0, 0) };
+            deletion.Children.Add(new TextBlock { Text = "删除实例", FontSize = 16, FontWeight = FontWeights.SemiBold });
+            deletion.Children.Add(new TextBlock { Text = "删除此版本目录；共享根目录与其他实例保留。", FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 7, 0, 10) });
+            var delete = Button("删除实例…", (_, _) => Try(() => { if (launcher.DeleteInstance(card, this)) Close(); }));
+            delete.Name = "DeleteInstanceButton"; delete.HorizontalAlignment = HorizontalAlignment.Left; delete.Margin = new Thickness(0);
+            deletion.Children.Add(delete); Body.Children.Add(deletion);
+        }
         Actions.Children.Add(Button("关闭", (_, _) => Close()));
         Actions.Children.Add(Button("保存设置", (_, _) => Try(() =>
         {
@@ -124,6 +175,7 @@ public sealed class InstanceWindow : FormWindow
                 if (!string.IsNullOrEmpty(javaPath) && !File.Exists(javaPath)) throw new ArgumentException("Java 路径不存在。请重新选择，或选择自动匹配 / 沿用全局设置。");
                 if (automatic != true && jvm.InitialMemoryMb > value) throw new ArgumentException("初始堆内存不能大于最大游戏内存。");
             }
+            card.Preferences.IconKey=iconKey; card.Preferences.IconPng=iconPng;
             card.Preferences.DisplayName = display; card.Preferences.Favorite = favorite.IsChecked == true; card.Preferences.MemoryMb = value; card.Preferences.JavaPath = javaPath;
             card.Preferences.AutoMemory = automatic; card.Preferences.Jvm = jvm;
             save(); Close();

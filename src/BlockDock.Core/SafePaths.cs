@@ -4,7 +4,8 @@ namespace BlockDock.Core;
 
 public static class SafePaths
 {
-    public static string Under(string root, string relative)
+    // Resolve archive names without touching disk; destination link checks belong to actual writes.
+    internal static string ResolveUnder(string root, string relative)
     {
         relative = relative.Replace('\\', '/');
         if (string.IsNullOrWhiteSpace(relative) || relative.StartsWith('/') || relative.Contains(':') || relative.Contains('\0') ||
@@ -14,6 +15,12 @@ public static class SafePaths
         var path = Path.GetFullPath(Path.Combine(absoluteRoot, relative));
         if (!path.StartsWith(absoluteRoot, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException($"文件路径超出安装目录：{relative}");
+        return path;
+    }
+    public static string Under(string root, string relative)
+    {
+        var path = ResolveUnder(root, relative);
+        var absoluteRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         // Refuse junctions / symbolic links already present in the destination chain.
         for (var current = path; current is not null; current = Path.GetDirectoryName(current))
         {

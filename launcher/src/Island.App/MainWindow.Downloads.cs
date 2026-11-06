@@ -40,17 +40,45 @@ public partial class MainWindow
             UpdateSelected();
         };
         AllowDrop = true;
-        DragOver += (_, e) =>
+        PreviewDragEnter += PreviewArchiveDrag;
+        PreviewDragOver += PreviewArchiveDrag;
+        PreviewDragLeave += (_, e) =>
         {
-            if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
-            e.Effects = e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length == 1 && Archive(files[0]) ? DragDropEffects.Copy : DragDropEffects.None;
-            e.Handled = true;
+            var point = e.GetPosition(this);
+            if (point.X <= 0 || point.Y <= 0 || point.X >= ActualWidth || point.Y >= ActualHeight)
+                ArchiveDropHint.Visibility = Visibility.Collapsed;
         };
-        Drop += async (_, e) =>
-        {
-            if (e.Data.GetData(DataFormats.FileDrop) is not string[] { Length: 1 } files || !Archive(files[0])) return;
-            e.Handled = true; NavDownloads.IsChecked = true; await DownloadCenterView.ImportAsync(files[0]);
-        };
+        PreviewDrop += DropArchive;
+        Deactivated += (_, _) => ArchiveDropHint.Visibility = Visibility.Collapsed;
     }
-    private static bool Archive(string path) => Path.GetExtension(path).ToLowerInvariant() is ".zip" or ".mrpack";
+    private bool CanDropArchive => ready && operation is null && game is null && DownloadCenterView.CanImportArchive;
+    private static string? DroppedArchive(IDataObject data)
+    {
+        if (!data.GetDataPresent(DataFormats.FileDrop) || data.GetData(DataFormats.FileDrop) is not string[] { Length: 1 } files) return null;
+        var path = files[0];
+        return Path.GetExtension(path).ToLowerInvariant() is ".zip" or ".mrpack" && File.Exists(path) ? path : null;
+    }
+    private void PreviewArchiveDrag(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+        var accepted = CanDropArchive && (e.AllowedEffects & DragDropEffects.Copy) != 0 && DroppedArchive(e.Data) is not null;
+        e.Effects = accepted ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+        ArchiveDropHint.Visibility = accepted ? Visibility.Visible : Visibility.Collapsed;
+    }
+    private async Task ImportLocalArchiveAsync(string path)
+    {
+        var import = DownloadCenterView.ImportAsync(path);
+        NavDownloads.IsChecked = true;
+        await import;
+    }
+    private async void DropArchive(object sender, DragEventArgs e)
+    {
+        ArchiveDropHint.Visibility = Visibility.Collapsed;
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+        e.Handled = true; e.Effects = DragDropEffects.None;
+        if (!CanDropArchive || (e.AllowedEffects & DragDropEffects.Copy) == 0 || DroppedArchive(e.Data) is not { } path) return;
+        e.Effects = DragDropEffects.Copy;
+        await ImportLocalArchiveAsync(path);
+    }
 }

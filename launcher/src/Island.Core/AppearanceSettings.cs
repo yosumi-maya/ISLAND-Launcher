@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using System.Text.Json.Serialization;
 
 namespace Island.Core;
@@ -49,6 +49,7 @@ public sealed record SurfaceAppearance
 
 public sealed record LauncherAppearance
 {
+    public int PaletteVersion { get; set; }
     public bool DarkTheme { get; set; }
     public bool HideSidebarDoll { get; set; }
     public LaunchBarMode LaunchBarMode { get; set; }
@@ -63,7 +64,7 @@ public sealed record LauncherAppearance
     }
     public double WindowOpacity { get; set; } = 1;
     public SurfaceAppearance Window { get; set; } = new();
-    public SurfaceAppearance Hero { get; set; } = new() { ImageTint = .4 };
+    public SurfaceAppearance Hero { get; set; } = new() { ImageTint = .4, DefaultIllustration = false };
     public SurfaceAppearance Instances { get; set; } = new();
     public SurfaceAppearance Panels { get; set; } = new();
     public SurfaceAppearance Sidebar { get; set; } = new();
@@ -93,8 +94,12 @@ public sealed record LauncherAppearance
     public LauncherAppearance Normalize()
     {
         var result = this with { WindowOpacity = SurfaceAppearance.Clamp(WindowOpacity, .4, 1, 1), LaunchBarMode = Enum.IsDefined(LaunchBarMode) ? LaunchBarMode : LaunchBarMode.Always,
-            CardAnimation = Enum.IsDefined(CardAnimation) ? CardAnimation : CardAnimationMode.FloatTilt };
+            CardAnimation = CardAnimation is CardAnimationMode.Off or CardAnimationMode.FloatTilt or CardAnimationMode.Lift ? CardAnimation : CardAnimationMode.FloatTilt };
         foreach (var area in Enum.GetValues<SurfaceArea>()) result.Set(area, (For(area) ?? new()).Normalize());
+        // Migrate only the old untouched hero; explicit colors, images and materials remain independent.
+        if (PaletteVersion < 1 && result.Hero == new SurfaceAppearance { ImageTint = .4 })
+            result.Hero = result.Hero with { DefaultIllustration = false };
+        result.PaletteVersion = Math.Max(1, PaletteVersion);
         return result;
     }
 }

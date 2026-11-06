@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Text;
@@ -32,6 +32,12 @@ internal static class Program
     }
     private static Button Button(DependencyObject root, string content) => Descendants<Button>(root).First(b => b.Content as string == content);
     private static void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+    private static void ExpandInstanceSettings(InstanceWindow window)
+    {
+        window.UpdateLayout();
+        foreach (var row in Descendants<InstanceSettingRow>(window)) row.Expanded = true;
+        window.UpdateLayout();
+    }
     private static void ManageSelectedInstance(MainWindow window)
     {
         var list = Find<ListBox>(window, "InstanceList"); list.UpdateLayout();
@@ -175,6 +181,52 @@ internal static class Program
             try
             {
                 await Task.Delay(100);
+                if (args.Contains("--memory-order-only"))
+                {
+                    await MemoryOrderUiTests.RunAsync(window,root,Check);
+                    Console.WriteLine($"ALL {checks} MEMORY ORDER CHECKS PASSED");return;
+                }
+                if (args.Contains("--removal-only"))
+                {
+                    await RemovalUiTests.RunAsync(window,root,Check,Capture);
+                    Console.WriteLine($"ALL {checks} REMOVAL CHECKS PASSED");return;
+                }
+                if (args.Contains("--archive-drop-only"))
+                {
+                    await ArchiveDropUiTests.RunAsync(window,root,Check,Capture);
+                    Console.WriteLine($"ALL {checks} ARCHIVE DROP CHECKS PASSED");return;
+                }
+                if (args.Contains("--skin-workflows-only"))
+                {
+                    Find<RadioButton>(window,"NavAccounts").IsChecked=true;
+                    skinSelection=SkinUiTests.MakeSkin(root);SkinUiTests.Run(window,store,Check,Capture);
+                    Console.WriteLine($"ALL {checks} SKIN WORKFLOW CHECKS PASSED");return;
+                }
+                if (args.Contains("--default-skin-only"))
+                {
+                    DefaultSkinUiTests.Run(window,root,Check,Capture);
+                    Console.WriteLine($"ALL {checks} DEFAULT SKIN CHECKS PASSED");return;
+                }
+                if (args.Contains("--appearance-cleanup-only"))
+                {
+                    await AppearanceCleanupUiTests.RunAsync(window,root,Check,Capture);
+                    Console.WriteLine($"ALL {checks} APPEARANCE CLEANUP CHECKS PASSED");return;
+                }
+                if (args.Contains("--multiplayer-only"))
+                {
+                    await MultiplayerUiTests.RunAsync(window,root,Check,Capture);
+                    Console.WriteLine($"ALL {checks} MULTIPLAYER CHECKS PASSED");return;
+                }
+                if (args.Contains("--instance-icons-only"))
+                {
+                    InstanceIconUiTests.Run(window, root, Check, Capture);
+                    Console.WriteLine($"ALL {checks} INSTANCE ICON CHECKS PASSED"); return;
+                }
+                if (args.Contains("--cape-only"))
+                {
+                    CapeTextureTests.Run(window, Check, Capture);
+                    Console.WriteLine($"ALL {checks} CAPE CHECKS PASSED"); return;
+                }
                 if (args.Contains("--map-appearance-only"))
                 {
                     await MapAppearanceUiTests.RunAsync(window, root, Check, Capture);
@@ -265,10 +317,16 @@ internal static class Program
                 {
                     await VerifyManualCleanup(); Console.WriteLine($"ALL {checks} MANUAL MEMORY CLEANUP CHECKS PASSED"); return;
                 }
+                DefaultSkinUiTests.Run(window,root,Check,Capture);
+                await AppearanceCleanupUiTests.RunAsync(window,root,Check,Capture);
+                await MultiplayerUiTests.RunAsync(window,root,Check,Capture);
                 await VerifyDollMemoryMenu();
                 await LaunchOptionsUiTests.Run(window, root, Check, Capture, captureRoot);
                 await MicrosoftLoginUiTests.RunAsync(window, Check, Capture);
                 await DownloadCenterUiTests.RunAsync(window, root, Check, Capture);
+                await ArchiveDropUiTests.RunAsync(window, root, Check, Capture);
+                await RemovalUiTests.RunAsync(window,root,Check,Capture);
+                await MemoryOrderUiTests.RunAsync(window,root,Check);
                 await ContentDownloadUiTests.RunAsync(window, root, Check, Capture);
                 await DesignPolishUiTests.RunAsync(window, root, Check, Capture);
                 await MapAppearanceUiTests.RunAsync(window, root, Check, Capture);
@@ -290,7 +348,11 @@ internal static class Program
                 skinSelection = SkinUiTests.MakeSkin(root);
                 SkinUiTests.Run(window, store, Check, Capture);
                 await Skin3dUiTests.VerifyLiveFrames(window, Check);
-                if (!args.Contains("--skins-only") && !args.Contains("--appearance-only")) await LibraryMotionTests.Run(window, store, Check, Capture);
+                if (!args.Contains("--skins-only") && !args.Contains("--appearance-only"))
+                {
+                    if (args.Contains("--skip-motion")) Console.WriteLine("SKIP LibraryMotionTests (explicit --skip-motion; animation timing is checked separately)");
+                    else await LibraryMotionTests.Run(window, store, Check, Capture);
+                }
                 if (args.Contains("--skins-only")) return;
                 if (args.Contains("--appearance-only"))
                 {
@@ -333,7 +395,7 @@ internal static class Program
                 var managerState = store.Load();
                 var managerCard = new InstanceCard(card.Instance, managerState.For(card.Id));
                 var manager = new InstanceWindow(window, managerCard, managerState, () => store.Save(managerState)) { Left = -15000, Top = 0, WindowStartupLocation = WindowStartupLocation.Manual, ShowInTaskbar = false };
-                manager.Show(); manager.UpdateLayout();
+                manager.Show(); ExpandInstanceSettings(manager);
                 Check(!Descendants<ComboBox>(manager).Single(box => box.Name == "InstanceJavaBox").IsEnabled, "Instance runtime fields inherit global settings until independent mode is enabled");
                 var favorite = Descendants<CheckBox>(manager).Single(box => box.Name == "FavoriteBox");
                 var toggleFavorite = (IToggleProvider)new CheckBoxAutomationPeer(favorite).GetPattern(PatternInterface.Toggle)!;
@@ -379,7 +441,7 @@ internal static class Program
                 var java = candidates.First(j => j.Is64Bit && j.Major >= 17 && File.Exists(Path.Combine(Path.GetDirectoryName(j.Path)!, "javac.exe")));
                 var detectingState = store.Load();
                 var detecting = new InstanceWindow(window, new InstanceCard(card.Instance, detectingState.For(card.Id)), detectingState, () => { }) { Left = -15000, Top = 0, WindowStartupLocation = WindowStartupLocation.Manual, ShowInTaskbar = false };
-                detecting.Show(); detecting.UpdateLayout();
+                detecting.Show(); ExpandInstanceSettings(detecting);
                 Descendants<CheckBox>(detecting).Single(box => box.Name == "IndependentRuntimeBox").IsChecked = true;
                 var detectButton = Button(detecting, "检测"); Click(detectButton);
                 await WaitUntil(() => detectButton.IsEnabled, "Per-version Java detection did not finish");
@@ -440,7 +502,7 @@ internal static class Program
                 Check(store.Load().ActiveGameFolder.Name == "模组收藏" && tabs.Items.Cast<RadioButton>().Any(tab => ((TextBlock)tab.Content).Text == "模组收藏"), "Renaming an imported folder updates its tab and persists");
                 _ = window.Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    var dialog = app.Windows.OfType<InstanceWindow>().Single(); dialog.UpdateLayout();
+                    var dialog = app.Windows.OfType<InstanceWindow>().Single(); ExpandInstanceSettings(dialog);
                     Descendants<CheckBox>(dialog).Single(box => box.Name == "FavoriteBox").IsChecked = true; Click(Button(dialog, "保存设置"));
                 }));
                 ManageSelectedInstance(window);
@@ -513,7 +575,7 @@ internal static class Program
                 Check(store.Load().GameFolders.Count == 3 && store.Load().GameFolders.Any(f => f.Name == "模组收藏"), "Canceling import preserves existing folder names and does not add duplicates");
                 void EditSelected(Action<InstanceWindow> edit)
                 {
-                    _ = window.Dispatcher.BeginInvoke(new Action(() => { var dialog = app.Windows.OfType<InstanceWindow>().Single(); dialog.UpdateLayout(); edit(dialog); }));
+                    _ = window.Dispatcher.BeginInvoke(new Action(() => { var dialog = app.Windows.OfType<InstanceWindow>().Single(); ExpandInstanceSettings(dialog); edit(dialog); }));
                     ManageSelectedInstance(window);
                 }
                 void SetIsolation(VersionIsolation mode)
@@ -613,7 +675,7 @@ internal static class Program
                     Descendants<CheckBox>(dialog).Single(box => box.Name == "IndependentRuntimeBox").IsChecked = true;
                     Descendants<MemoryAllocationEditor>(dialog).Single().CustomOption.IsChecked = true;
                     Descendants<MemoryAllocationEditor>(dialog).Single().MemorySlider.Value = 1024;
-                    Click(Button(dialog, "Java 虚拟机设置  ▸")); dialog.UpdateLayout();
+                    Descendants<InstanceSettingRow>(dialog).Single(row => row.Name == "InstanceAdvancedSetting").Expanded = true; dialog.UpdateLayout();
                     foreach (var field in new[] { "OmitDefaultJvmBox", "OmitJvmOptimizationsBox", "SkipJavaCompatibilityBox" }) Descendants<CheckBox>(dialog).Single(box => box.Name == field).IsChecked = true;
                     var argumentsBox = Descendants<TextBox>(dialog).Single(box => box.Name == "ExtraJvmArgumentsBox");
                     argumentsBox.Text = "-Dtest=\"unclosed"; Click(Button(dialog, "保存设置"));
@@ -644,24 +706,28 @@ internal static class Program
                     window.Width = size.Item1; window.Height = size.Item2; window.UpdateLayout(); await Task.Delay(80); window.UpdateLayout();
                     var panel = Descendants<AdaptiveCardPanel>(Find<ListBox>(window, "InstanceList")).Single();
                     var tiles = panel.Children.Cast<FrameworkElement>().ToArray(); var firstRow = tiles.Where(tile => Math.Abs(tile.TranslatePoint(new Point(), panel).Y) < 1).ToArray();
-                    Check(firstRow.Length >= 3 && firstRow.All(tile => Math.Abs(tile.ActualWidth - firstRow[0].ActualWidth) < 1) && Math.Abs(firstRow[^1].TranslatePoint(new Point(firstRow[^1].ActualWidth, 0), panel).X - panel.ActualWidth) < 1,
+                    Check(firstRow.Length == Math.Min(tiles.Length, Math.Max(1, (int)((panel.ActualWidth + 12) / 236)))
+                        && firstRow.All(tile => Math.Abs(tile.ActualWidth - firstRow[0].ActualWidth) < 1) && Math.Abs(firstRow[^1].TranslatePoint(new Point(firstRow[^1].ActualWidth, 0), panel).X - panel.ActualWidth) < 1,
                         $"Responsive cards evenly fill the available row at {(int)size.Item1}px without a right-side gap");
                     var accountButton = Find<Button>(window, "SidebarAccountButton"); var launchButton = Find<Button>(window, "LaunchButton");
-                    Check(Math.Abs(accountButton.TranslatePoint(new Point(0, accountButton.ActualHeight / 2), window).Y - launchButton.TranslatePoint(new Point(0, launchButton.ActualHeight / 2), window).Y) < 1.1,
-                        $"Account and launch buttons align vertically at {(int)size.Item1}px");
                     var sidebarSurface = Find<MaterialBorder>(window, "SidebarSurface");
                     var contentSurface = Find<MaterialBorder>(window, "MainContentSurface");
                     var sidebarBounds = sidebarSurface.TransformToAncestor(window).TransformBounds(new Rect(sidebarSurface.RenderSize));
                     var contentBounds = contentSurface.TransformToAncestor(window).TransformBounds(new Rect(contentSurface.RenderSize));
+                    var accountBounds = accountButton.TransformToAncestor(window).TransformBounds(new Rect(accountButton.RenderSize));
+                    var launchBounds = launchButton.TransformToAncestor(window).TransformBounds(new Rect(launchButton.RenderSize));
+                    Check(sidebarBounds.Contains(accountBounds) && contentBounds.Contains(launchBounds)
+                        && accountBounds.Bottom <= sidebarBounds.Bottom - 15 && launchBounds.Bottom <= contentBounds.Bottom - 23,
+                        $"Account and launch buttons stay inside their independently padded panels at {(int)size.Item1}px");
                     var windowControls = Find<StackPanel>(window, "WindowControls");
                     var controlsBounds = windowControls.TransformToAncestor(window).TransformBounds(new Rect(windowControls.RenderSize));
                     var trafficLights = Find<StackPanel>(window, "WindowTrafficLights");
                     var lightsBounds = trafficLights.TransformToAncestor(window).TransformBounds(new Rect(trafficLights.RenderSize));
                     var editionLabel = Find<TextBlock>(window, "WindowEditionLabel");
                     var editionBounds = editionLabel.TransformToAncestor(window).TransformBounds(new Rect(editionLabel.RenderSize));
-                    Check(Math.Abs(sidebarBounds.Left - 12) < 1 && Math.Abs(window.ActualWidth - contentBounds.Right - 12) < 1
-                        && Math.Abs(sidebarBounds.Top - 40) < 1 && Math.Abs(sidebarBounds.Top - contentBounds.Top) < 1
-                        && Math.Abs(sidebarBounds.Bottom - contentBounds.Bottom) < 1 && Math.Abs(window.ActualHeight - contentBounds.Bottom - 12) < 1
+                    Check(Math.Abs(sidebarBounds.Left - 32) < 1 && Math.Abs(window.ActualWidth - contentBounds.Right - 32) < 1
+                        && Math.Abs(sidebarBounds.Top - 32) < 1 && Math.Abs(sidebarBounds.Top - contentBounds.Top) < 1
+                        && Math.Abs(sidebarBounds.Bottom - contentBounds.Bottom) < 1 && Math.Abs(window.ActualHeight - contentBounds.Bottom - 32) < 1
                         && Math.Abs(contentBounds.Left - sidebarBounds.Right - 12) < 1 && contentSurface.Area == SurfaceArea.Content,
                         $"The outer background surrounds two aligned inset modules at {(int)size.Item1}px");
                     Check(controlsBounds.Bottom <= contentBounds.Top && controlsBounds.Right <= window.ActualWidth

@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Controls;
@@ -31,6 +31,7 @@ internal static class DownloadCenterUiTests
     internal sealed class Service : ILauncherDownloads
     {
         public int GameRequests;
+        public int SearchRequests;
         public int LastPage;
         public PackSearchFilter? LastFilter;
         public TaskCompletionSource<CatalogSearchPage>? SearchGate;
@@ -45,7 +46,7 @@ internal static class DownloadCenterUiTests
             => Task.FromResult<IReadOnlyList<LoaderVersion>>([new("fixture-loader", "fixture-loader")]);
         public Task<CatalogSearchPage> SearchAsync(AppSettings settings, PackSearchFilter filter, int page, CancellationToken token)
         {
-            LastFilter = filter; LastPage = page;
+            SearchRequests++; LastFilter = filter; LastPage = page;
             if (SearchError is not null) return Task.FromException<CatalogSearchPage>(SearchError);
             return SearchGate?.Task ?? Task.FromResult(new CatalogSearchPage([
                 new("fixture", filter.Name.Length == 0 ? "Fixture Pack" : filter.Name, "A fictional pack used for local UI verification with a long description that should stay on a single line.", PackPlatform.Modrinth, 19357000, DateTimeOffset.Now.AddDays(-4), DateTimeOffset.Now, ["1.20.1"], ["Fabric"], "https://modrinth.com/modpack/fixture") { Categories = ["fabric", "multiplayer", "lightweight", "optimization"] },
@@ -53,10 +54,15 @@ internal static class DownloadCenterUiTests
             ], page, 42, page < 2, []));
         }
         public Task<CatalogVersionPage> GetReleasesAsync(AppSettings settings, CatalogProject project, PackSearchFilter filter, CancellationToken token)
-            => Task.FromResult(new CatalogVersionPage([new("fixture-release", "Fixture release", ["1.20.1"], ["fabric"], DateTimeOffset.Now, "正式版", new())], null));
+            => Task.FromResult(new CatalogVersionPage(Enumerable.Range(0, 80).Select(i => new CatalogVersion("fixture-release-" + i,
+                i == 0 ? "Fixture release" : "Fixture release " + i + " with a long name to verify readable version rows",
+                ["1.20.1"], ["fabric"], DateTimeOffset.Now.AddDays(-i), i % 2 == 0 ? "正式版" : "测试版", new()))
+                .Concat([new("modern-release", "Modern release", ["26.3"], ["neoforge", "fabric"], DateTimeOffset.Now.AddDays(-100), "正式版", new()),
+                    new("snapshot-release", "Snapshot release", ["26w01a"], ["fabric"], DateTimeOffset.Now.AddDays(-101), "测试版", new())]).ToArray(), null));
         public Task<PackInfo> PrepareAsync(AppSettings settings, CatalogProject project, CatalogVersion release, CancellationToken token)
             => Task.FromResult(new PackInfo { ArchivePath = Path.Combine(settings.GameDirectory, "owned-fixture.mrpack"), Name = "Fixture Pack", MinecraftVersion = "1.20.1", Format = PackFormat.Modrinth, OptionalCount = 2, Manifest = new() });
-        public Task<PackInfo> InspectAsync(string file, CancellationToken token) => throw new NotSupportedException();
+        public Func<string, CancellationToken, Task<PackInfo>>? Inspect;
+        public Task<PackInfo> InspectAsync(string file, CancellationToken token) => Inspect?.Invoke(file, token) ?? throw new NotSupportedException();
         public async Task<string> InstallAsync(AppSettings settings, InstallRequest request, PackInfo? pack, IProgress<InstallProgress> progress, CancellationToken token)
         {
             Runs.Add(request.InstanceName); progress.Report(new("Fixture download", "Owned local data", 3, 10, 1024, 512));
@@ -105,7 +111,7 @@ internal static class DownloadCenterUiTests
         foreach (var test in DownloadQueueTests.Cases()) { test.Run(Path.Combine(root, Guid.NewGuid().ToString("N"))); check(true, "Reused downloader queue: " + test.Name); }
         var data = Path.Combine(root, "download-center-ui"); var firstRoot = Path.Combine(data, "first"); var secondRoot = Path.Combine(data, "second");
         var store = new LauncherStore(Path.Combine(data, "settings")); var state = new LauncherState { GameDirectory = firstRoot, AutoMemory = false, MemoryMb = 512 };
-        state.EnsureGameFolders(); store.Save(state); var service = new Service(); var allowClose = false;
+        state.EnsureGameFolders(); state.AddGameFolder(secondRoot, "Second"); store.Save(state); var service = new Service(); var allowClose = false;
         var cache = new JavaRuntimeCache(store.DirectoryPath, (_, _, _) => Task.FromResult<IReadOnlyList<JavaInstallation>>([]));
         var window = new MainWindow(store, javaRuntimes: cache, downloadService: service, confirmDownloadClose: () => allowClose)
             { Owner = owner, Left = -16000, Top = 0, WindowStartupLocation = WindowStartupLocation.Manual, ShowInTaskbar = false };
@@ -115,8 +121,8 @@ internal static class DownloadCenterUiTests
             check(service.GameRequests == 0, "Launcher startup does not query downloader services before opening the download center");
             Find<RadioButton>(window, "NavDownloads").IsChecked = true; var center = Find<DownloadCenter>(window, "DownloadCenterView");
             await Wait(() => Find<Button>(center, "InstallGameButton").IsEnabled); window.UpdateLayout();
-            check(center.IsVisible && Find<TextBlock>(center, "AvailabilityNotice").Text == DownloadAvailability.CurseForgeNotice
-                && Find<ComboBox>(center, "GameVersions").Items.Count == 1 && Find<TextBlock>(center, "Destination").Text.Contains(firstRoot), "Native download center shows game selection, the target directory and explicit CurseForge availability");
+            check(center.IsVisible && center.FindName("AvailabilityNotice") is null
+                && Find<ComboBox>(center, "GameVersions").Items.Count == 1 && center.FindName("Destination") is null, "Download center shows game selection without the removed destination line or availability banner");
             Find<CheckBox>(center, "ShowSnapshots").IsChecked = true;
             check(Find<ComboBox>(center, "GameVersions").Items.Count == 2, "Game downloads can include snapshots and historical versions");
             Find<CheckBox>(center, "ShowSnapshots").IsChecked = false;
@@ -128,7 +134,10 @@ internal static class DownloadCenterUiTests
                 capture(window, "Downloads-Games-" + (int)size.Item1);
             }
             window.Width = 1240; window.Height = 830;
+            var beforeBrowse = service.SearchRequests;
             Find<RadioButton>(center, "PacksTab").IsChecked = true;
+            await Wait(() => Find<ListBox>(center, "PackResults").Items.Count > 0);
+            check(service.SearchRequests == beforeBrowse + 1 && service.LastFilter is { Name: "", GameVersion: "" }, "Entering the pack catalog automatically loads popular content once without entering a query");
             var versionFilter = Find<ComboBox>(center, "PackGameVersion");
             check(versionFilter.Text == "全部" && versionFilter.SelectedItem as string == "全部" && !versionFilter.Items.Cast<string>().Contains(""), "Pack version filtering defaults to a visible All option without a blank dropdown item");
             await center.SearchAsync(0);
@@ -160,9 +169,18 @@ internal static class DownloadCenterUiTests
                 capture(window, "Downloads-Compact-Packs-" + (int)width);
             }
             window.Width = 1240; window.UpdateLayout();
+            var beforeReturn = service.SearchRequests;
+            Find<RadioButton>(window, "NavLibrary").IsChecked = true;
+            Find<RadioButton>(window, "NavDownloads").IsChecked = true;
+            await Wait(() => service.SearchRequests == beforeReturn + 1 && Find<Button>(center, "SearchButton").IsEnabled);
+            check(service.LastFilter is { Name: "Fresh pack", GameVersion: "1.20.1", Loader: LoaderKind.Fabric }
+                && (packList.SelectedItem as PackSearchCard)?.Project.Id == "second-fixture", "Returning to downloads refreshes the catalog while retaining filters and the selected project");
             var retained = packList.ItemsSource; var retainedSelection = packList.SelectedItem;
             var canceledGate = service.SearchGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
             var canceledSearch = center.SearchAsync(0);
+            beforeReturn = service.SearchRequests;
+            center.Activate(); center.Activate();
+            check(service.SearchRequests == beforeReturn, "Repeated activation does not duplicate a pending automatic refresh");
             check(ReferenceEquals(packList.ItemsSource, retained) && !Find<Button>(center, "ChoosePackButton").IsEnabled
                 && Find<Button>(center, "CancelSearchButton").Visibility == Visibility.Visible, "Loading retains existing results and exposes cancellation while preventing installation from stale selection");
             Click(Find<Button>(center, "CancelSearchButton")); await canceledSearch;
@@ -179,8 +197,21 @@ internal static class DownloadCenterUiTests
             check(ReferenceEquals(packList.ItemsSource, retained) && Find<TextBlock>(center, "PackSummary").Text.Contains("保留上次结果"), "A failed search retains usable previous results and reports recovery inline");
             service.SearchError = null;
             check(center.FocusSearch() && Find<TextBox>(center, "PackQuery").SelectionLength == Find<TextBox>(center, "PackQuery").Text.Length, "Search focus selects the query for efficient keyboard replacement");
-            Click(Find<Button>(center, "NextPage")); await Wait(() => service.LastPage == 1 && Find<TextBlock>(center, "PackPageLabel").Text == "第 2 页");
-            check(service.LastFilter?.Name == "Fresh pack", "Pack pagination retains the applied filter");
+            var pagingRows = Enumerable.Range(0, 40).Select(i => ((PackSearchCard)packList.Items[0]).Project with { Id = "paging-" + i, Title = "Paging fixture " + i }).ToArray();
+            var firstPageGate = service.SearchGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            var firstPageLoad = center.SearchAsync(0); firstPageGate.SetResult(new(pagingRows, 0, 80, true, [])); await firstPageLoad;
+            window.UpdateLayout(); var pagingScroll = Children<ScrollViewer>(packList).First();
+            pagingScroll.ScrollToEnd(); window.UpdateLayout(); await Wait(() => pagingScroll.VerticalOffset > 0);
+            var nextPageGate = service.SearchGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            Click(Find<Button>(center, "NextPage")); nextPageGate.SetResult(new(pagingRows, 1, 80, false, []));
+            await Wait(() => service.LastPage == 1 && Find<TextBlock>(center, "PackPageLabel").Text == "第 2 页" && pagingScroll.VerticalOffset == 0);
+            check(service.LastFilter?.Name == "Fresh pack" && ((PackSearchCard)packList.SelectedItem).Project.Id == "paging-0", "Next page retains filters and resets the scrolled list and selection to its first result");
+            pagingScroll.ScrollToEnd(); window.UpdateLayout(); await Wait(() => pagingScroll.VerticalOffset > 0);
+            var previousPageGate = service.SearchGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            Click(Find<Button>(center, "PreviousPage")); previousPageGate.SetResult(new(pagingRows, 0, 80, true, []));
+            await Wait(() => Find<TextBlock>(center, "PackPageLabel").Text == "第 1 页" && pagingScroll.VerticalOffset == 0);
+            check(((PackSearchCard)packList.SelectedItem).Project.Id == "paging-0", "Previous page also starts at the top after scrolling to the end");
+            service.SearchGate = null;
             capture(window, "Downloads-Packs-1240");
             var gate = service.SearchGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
             var stale = center.SearchAsync(0, new("Old query", Platform: PackPlatform.Modrinth)); service.SearchGate = null;
@@ -201,13 +232,53 @@ internal static class DownloadCenterUiTests
                     await Wait(() => Application.Current.Windows.OfType<PackReleaseWindow>().Any());
                     var release = Application.Current.Windows.OfType<PackReleaseWindow>().Single();
                     await Wait(() => Children<Button>(release).Any(b => b.Content as string == "下一步  →" && b.IsEnabled));
-                    var releaseGame = Children<ComboBox>(release).Single(box => box.IsEditable);
-                    check(releaseGame.Text == "全部" && releaseGame.Items[0] as string == "全部" && !releaseGame.Items.Cast<string>().Contains(""), "Pack release filtering defaults to All instead of an empty dropdown item");
-                    check(releaseGame.Items.Cast<string>().Contains("1.20.1"), "Pack release filtering also offers an editable Minecraft version dropdown");
-                    releaseGame.Text = "missing-version"; await Task.Delay(30);
-                    check(!Children<Button>(release).Single(b => b.Content as string == "下一步  →").IsEnabled, "A typed version with no releases disables installation");
-                    releaseGame.Text = "1.20.1"; await Task.Delay(30);
+                    var browser = Children<CatalogReleaseBrowser>(release).Single();
+                    check(browser.ReleaseFilters.Visibility == Visibility.Collapsed, "Modpack details omit the extra release search, version, loader and channel filter row");
+                    var chips = Find<StackPanel>(browser, "VersionChips").Children.OfType<RadioButton>().ToArray();
+                    check(chips.Select(chip => chip.Content as string).SequenceEqual(new[] { "全部", "26.3", "1.20", "快照 / 其他" })
+                        && Children<Button>(browser).Any(button => button.Content as string == "转到 Modrinth")
+                        && Children<Button>(browser).Any(button => button.Content as string == "转到 MC 百科")
+                        && Children<Button>(browser).Any(button => button.Content as string == "复制名称"), "PCL-style project header offers source/wiki/copy actions and sorted Minecraft family chips");
+                    chips.Single(chip => chip.Content as string == "26.3").IsChecked = true; release.UpdateLayout();
+                    var modernGroups = ((System.Windows.Data.ListCollectionView)browser.ReleaseList.ItemsSource).Groups!;
+                    check(browser.ReleaseList.Items.Cast<CatalogVersion>().Select(version => version.Id).Distinct().Count() == 1
+                        && modernGroups.Count == 2 && modernGroups.Cast<System.Windows.Data.CollectionViewGroup>().All(group => group.Name.ToString()!.Contains("26.3"))
+                        && browser.ReleaseStatus.Text.StartsWith("显示 1 /"), "Version chips filter locally and multi-loader releases appear in both loader groups without inflating the release count");
+                    chips.Single(chip => chip.Content as string == "全部").IsChecked = true;
+                    chips.Single(chip => chip.Content as string == "快照 / 其他").IsChecked = true;
+                    check(browser.SelectedVersion?.Id == "snapshot-release", "Snapshot releases can be selected through the remaining version-series chips");
+                    chips.Single(chip => chip.Content as string == "1.20").IsChecked = true; await Task.Delay(30);
+                    release.UpdateLayout();
+                    var releaseList = Children<ListBox>(release).Single();
+                    var rows = Children<ListBoxItem>(releaseList).ToArray();
+                    check(releaseList.Items.Count == 80 && rows.Length < 30 && rows.All(row => row.ActualHeight >= 58)
+                        && !Children<Grid>(releaseList).Any(CardMotion.GetIsCard), "Release lists have readable independent rows and virtualize long catalogs without instance-card motion");
+                    releaseList.SelectedIndex = 79; releaseList.ScrollIntoView(releaseList.SelectedItem); release.UpdateLayout();
+                    check(((ListBoxItem)releaseList.ItemContainerGenerator.ContainerFromIndex(79)).ActualHeight >= 58, "The last release remains reachable in a long virtualized list");
+                    releaseList.SelectedIndex = 0; releaseList.ScrollIntoView(releaseList.SelectedItem); release.UpdateLayout();
+                    var group = Children<Expander>(releaseList).First(); group.IsExpanded = false; release.UpdateLayout();
+                    check(group.IsExpanded == false && browser.CanInstall, "Release groups collapse without losing the selected version");
+                    capture(release, "Downloads-Pack-Groups-Collapsed");
+                    group.IsExpanded = true; release.UpdateLayout();
+                    Children<ScrollViewer>(releaseList).First().ScrollToTop(); await Task.Delay(30); release.UpdateLayout();
                     capture(release, "Downloads-Pack-Releases");
+                    release.Width = 680; release.Height = 620; release.UpdateLayout();
+                    var next = Children<Button>(release).Single(b => b.Content as string == "下一步  →");
+                    check(next.TransformToAncestor(release).TransformBounds(new Rect(next.RenderSize)).Bottom < release.ActualHeight
+                        && releaseList.ActualHeight >= 80, "Release scrolling and the fixed install action fit shorter windows");
+                    capture(release, "Downloads-Pack-Releases-Compact");
+                    var renderContext = new AppearanceRenderContext();
+                    release.SetValue(MaterialBorder.RenderContextProperty, renderContext);
+                    foreach (var dark in new[] { false, true })
+                    {
+                        renderContext.Apply(new LauncherAppearance { DarkTheme = dark }, "#2463EB");
+                        ThemeManager.Apply("#2463EB", release.Resources, dark); release.UpdateLayout();
+                        var row = Children<MaterialBorder>(releaseList).First();
+                        var foreground = ((SolidColorBrush)row.FindResource("Muted")).Color;
+                        var background = ((SolidColorBrush)row.FindResource("Surface")).Color;
+                        check(ThemeManager.Contrast(foreground, background) >= 4.5, "Release metadata remains readable in " + (dark ? "dark" : "light") + " themes");
+                        capture(release, dark ? "Downloads-Pack-Releases-Dark" : "Downloads-Pack-Releases-Blue");
+                    }
                     _ = release.Dispatcher.BeginInvoke(new Action(() => Click(Children<Button>(release).Single(b => b.Content as string == "下一步  →"))));
                     await Wait(() => Application.Current.Windows.OfType<PackConfirmationWindow>().Any());
                     var confirmation = Application.Current.Windows.OfType<PackConfirmationWindow>().Single();
@@ -234,7 +305,7 @@ internal static class DownloadCenterUiTests
             check(second.State == DownloadTaskState.Queued && !Find<Button>(window, "LaunchButton").IsEnabled, "Multiple installs queue sequentially and block conflicting game launch preparation");
             check(first.Percent == 30 && first.Stage == "Fixture download" && Children<ProgressBar>(center).Any(bar => bar.Value == 30), "Task cards show the actual throttled progress through read-only bindings");
             capture(window, "Downloads-Tasks-1240");
-            Find<TextBox>(window, "RootBox").Text = secondRoot; Find<ComboBox>(window, "SourceBox").SelectedValue = DownloadSource.Official;
+            Find<ItemsControl>(window, "FolderTabs").Items.Cast<RadioButton>().Single(tab => tab.ToolTip as string == secondRoot).IsChecked = true; Find<ComboBox>(window, "SourceBox").SelectedValue = DownloadSource.Official;
             Find<ComboBox>(window, "DownloadParallelBox").SelectedItem = 16;
             Find<RadioButton>(window, "NavSettings").IsChecked = true;
             window.UpdateLayout();

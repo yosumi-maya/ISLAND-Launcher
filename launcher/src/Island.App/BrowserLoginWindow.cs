@@ -32,14 +32,16 @@ public sealed class BrowserLoginWindow : FormWindow
         : base(owner, "登录 Microsoft", "在系统浏览器的 Microsoft 官方页面授权，完成后会自动返回。启动器不会收集你的密码。", 600)
     {
         this.signIn = signIn; this.external = external; this.openBrowser = openBrowser ?? MainWindow.OpenPath;
-        Body.Children.Add(new TextBlock { Text = "浏览器登录", FontSize = 16, FontWeight = FontWeights.SemiBold });
+        Body.Children.Add(new TextBlock { Text = "选择登录方式", FontSize = 16, FontWeight = FontWeights.SemiBold });
         Body.Children.Add(status);
-        browserButton = Button("重新打开浏览器  ↗", (_, _) => OpenOrRetry(), true); browserButton.Name = "ReopenMicrosoftBrowser";
+        status.Text = "选择登录方式后，再打开 Microsoft 官方登录页。";
+        browserButton = Button("打开浏览器登录  ↗", (_, _) => OpenOrRetry(), true); browserButton.Name = "ReopenMicrosoftBrowser";
         Actions.Children.Add(Button("取消", (_, _) => Close()));
-        var fallback = Button("改用设备码登录", (_, _) => { UseDeviceCode = true; Close(); }); fallback.Name = "UseMicrosoftDeviceCode";
+        var fallback = Button("设备码登录", (_, _) => { UseDeviceCode = true; Close(); }); fallback.Name = "UseMicrosoftDeviceCode";
         Actions.Children.Add(fallback); Actions.Children.Add(browserButton); Body.Children.Add(Actions);
-        Loaded += async (_, _) => await StartAsync();
-        Closed += (_, _) => { closed = true; attempt?.Cancel(); };
+        AddMinecraftPurchaseLink(this.openBrowser);
+        var cancellation = external.Register(() => Dispatcher.BeginInvoke(new Action(() => { if (!closed) Close(); })));
+        Closed += (_, _) => { closed = true; cancellation.Dispose(); attempt?.Cancel(); };
     }
 
     private async void OpenOrRetry()
@@ -58,11 +60,15 @@ public sealed class BrowserLoginWindow : FormWindow
         browserButton.Content = "重新打开浏览器  ↗"; status.Text = "正在打开 Microsoft 官方登录页…";
         try
         {
-            var result = await signIn(url =>
+            var pending = signIn(url =>
             {
+                if (closed || current.IsCancellationRequested || attempt != current) return;
                 address = url; openBrowser(url);
                 status.Text = "已打开浏览器。授权后将自动验证 Xbox 身份、Minecraft 游戏资格和玩家档案，请稍候。";
             }, current.Token);
+            // A late provider response must not keep Cancel or closing the launcher blocked.
+            _ = pending.ContinueWith(task => { _ = task.Exception; }, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            var result = await pending.WaitAsync(current.Token);
             current.Token.ThrowIfCancellationRequested();
             if (!closed) { Result = result; DialogResult = true; }
         }
@@ -71,6 +77,6 @@ public sealed class BrowserLoginWindow : FormWindow
         {
             if (!closed) { status.Text = ex.Message + "\n可以重试，或改用设备码登录。"; browserButton.Content = "重试浏览器登录  ↗"; }
         }
-        finally { attempt = null; address = null; current.Dispose(); }
+        finally { if (attempt == current) { attempt = null; address = null; } current.Dispose(); }
     }
 }

@@ -1,4 +1,4 @@
-param([string]$Runtime = 'win-x64', [switch]$SkipTests, [string]$OutputDirectory = '', [switch]$NoRestore)
+﻿param([string]$Runtime = 'win-x64', [switch]$SkipTests, [string]$OutputDirectory = '', [switch]$NoRestore)
 $ErrorActionPreference = 'Stop'
 $launcherRoot = $PSScriptRoot
 $offlineOptions = if ($NoRestore) { @('--no-restore', '-m:1', '-nodeReuse:false', '-p:UseSharedCompilation=false') } else { @() }
@@ -14,7 +14,9 @@ if (-not $SkipTests) {
     else { & dotnet run --project (Join-Path $launcherRoot 'tests/Island.App.Tests') -c Release }
     if ($LASTEXITCODE -ne 0) { throw '界面和启动流程测试失败。' }
 }
-$outputPath = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) { Join-Path $launcherRoot "dist/$Runtime" } else { [System.IO.Path]::GetFullPath($OutputDirectory) }
+$applicationProject = [xml](Get-Content -LiteralPath (Join-Path $launcherRoot 'src/Island.App/Island.App.csproj') -Raw)
+$applicationVersion = $applicationProject.SelectSingleNode('//Version').InnerText
+$outputPath = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) { Join-Path $launcherRoot "dist/$Runtime-$applicationVersion" } else { [System.IO.Path]::GetFullPath($OutputDirectory) }
 & dotnet publish (Join-Path $launcherRoot 'src/Island.App/Island.App.csproj') -c Release -r $Runtime --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -o $outputPath @offlineOptions
 if ($LASTEXITCODE -ne 0) { throw '启动器发布失败。' }
 Copy-Item -LiteralPath (Join-Path $launcherRoot 'README.md'),(Join-Path $launcherRoot 'REFERENCES.md'),(Join-Path $launcherRoot 'VERIFICATION.md'),(Join-Path $launcherRoot 'design-polish.md'),(Join-Path $launcherRoot 'LICENSE') -Destination $outputPath -Force

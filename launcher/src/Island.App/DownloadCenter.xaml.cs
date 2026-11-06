@@ -19,7 +19,7 @@ public partial class DownloadCenter : UserControl
     private Func<bool> canInstall = () => true;
     private Action<DownloadTask>? installed;
     private DownloadQueue? queue;
-    private CancellationTokenSource? gamesCancellation, loaderCancellation, searchCancellation;
+    private CancellationTokenSource? gamesCancellation, loaderCancellation, searchCancellation, importCancellation;
     private IReadOnlyList<GameVersion> versions = [];
     private PackSearchFilter appliedFilter = new(Platform: PackPlatform.Modrinth);
     private int loaderRevision, pageIndex;
@@ -30,7 +30,7 @@ public partial class DownloadCenter : UserControl
 
     public DownloadCenter()
     {
-        InitializeComponent(); AvailabilityNotice.Text = DownloadAvailability.CurseForgeNotice;
+        InitializeComponent();
         VersionFilter.SetVersions(PackGameVersion, []);
         PackGameVersion.LostKeyboardFocus += (_, _) => { if (VersionFilter.Value(PackGameVersion.Text).Length == 0) VersionFilter.SelectAll(PackGameVersion); };
         GameLoader.ItemsSource = Enum.GetValues<LoaderKind>(); GameLoader.SelectedIndex = 0;
@@ -59,19 +59,15 @@ public partial class DownloadCenter : UserControl
                 : await this.service.InstallAsync(task.Settings, task.Request, task.Pack, progress, token);
         });
         this.queue.Changed += Changed; this.queue.TaskSettled += Settled;
-        TaskList.ItemsSource = this.queue.Items; initialized = true; UpdateQueue(); timer.Start(); RefreshDestination();
+        TaskList.ItemsSource = this.queue.Items; initialized = true; UpdateQueue(); timer.Start();
     }
     public void Activate(bool showGames = false)
     {
-        RefreshDestination(); if (showGames) GamesTab.IsChecked = true;
-        if (contentKind is not null) RefreshContentTargets();
-        if (GamesTab.IsChecked == true && versions.Count == 0 && gamesCancellation is null) _ = LoadGamesAsync();
-    }
-    private void RefreshDestination()
-    {
         if (!initialized || closed) return;
-        var snapshot = DownloadAvailability.Snapshot(settings()); Destination.Text = "新任务安装到：" + snapshot.GameDirectory;
-        Destination.ToolTip = snapshot.GameDirectory;
+        if (showGames && GamesTab.IsChecked != true) { GamesTab.IsChecked = true; return; }
+        if (contentKind is not null) RefreshContentTargets();
+        if (GamesTab.IsChecked == true && gamesCancellation is null) _ = LoadGamesAsync();
+        else if (PacksPage.Visibility == Visibility.Visible && searchCancellation is null) _ = SearchAsync(pageIndex);
     }
     private void ChangeTab(object sender, RoutedEventArgs e)
     {
@@ -82,7 +78,7 @@ public partial class DownloadCenter : UserControl
         PacksPage.Visibility = catalog ? Visibility.Visible : Visibility.Collapsed;
         TasksPage.Visibility = tab.Tag as string == "Tasks" ? Visibility.Visible : Visibility.Collapsed;
         if (catalog) SelectCatalog(page!);
-        if ((GamesTab.IsChecked == true || catalog) && versions.Count == 0 && gamesCancellation is null) _ = LoadGamesAsync();
+        if ((GamesTab.IsChecked == true || (catalog && versions.Count == 0)) && gamesCancellation is null) _ = LoadGamesAsync();
     }
     private async void ReloadGames(object sender, RoutedEventArgs e) => await LoadGamesAsync();
     internal async Task LoadGamesAsync()
@@ -170,12 +166,17 @@ public partial class DownloadCenter : UserControl
         NextPage.IsEnabled = !closed && !busy && hasNext;
         ChoosePackButton.IsEnabled = !closed && !busy && PackResults.SelectedItem is not null;
     }
+    private void SetCatalogStatus(string text)
+    {
+        PackSummary.Text = text;
+        PackSummary.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
+    }
     private void ResetSearch(object sender, RoutedEventArgs e)
     {
         searchCancellation?.Cancel(); searchCancellation = null;
         PackQuery.Clear(); VersionFilter.SelectAll(PackGameVersion); PackLoader.SelectedIndex = 0; PackSortBox.SelectedIndex = 0;
         PackResults.ItemsSource = null; PackEmpty.Visibility = Visibility.Visible; PackEmpty.Text = "搜索 Modrinth 上的" + CatalogLabel;
-        PackSummary.Text = "搜索条件已重置。"; hasNext = false; pageIndex = 0; SetSearchBusy(false);
+        SetCatalogStatus(""); hasNext = false; pageIndex = 0; SetSearchBusy(false);
         PackSummary.ToolTip = null;
         CatalogEmptyHint.Text = "输入名称搜索，或保留全部版本，先浏览热门内容。";
         PackPageLabel.Text = "第 1 页";
@@ -191,7 +192,7 @@ public partial class DownloadCenter : UserControl
         searchCancellation = cancellation; SetSearchBusy(true);
         PackEmpty.Visibility = PackResults.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         PackEmpty.Text = "正在查询 Modrinth…"; CatalogEmptyHint.Text = "正在读取项目与版本信息，可按 Esc 取消。";
-        PackSummary.Text = "正在搜索" + CatalogLabel + "…";
+        SetCatalogStatus("正在搜索" + CatalogLabel + "…");
         PackSummary.ToolTip = null;
         var query = filter ?? ReadFilter();
         var resourceQuery = contentKind is null ? null : resourceFilter ?? ReadContentFilter();
@@ -202,14 +203,17 @@ public partial class DownloadCenter : UserControl
                 : contentService.SearchAsync(snapshot, resourceQuery, page, cancellation.Token);
             var result = await request.WaitAsync(cancellation.Token);
             cancellation.Token.ThrowIfCancellationRequested();
+            var pageChanged = pageIndex != result.Page;
             appliedFilter = query; pageIndex = result.Page; hasNext = result.HasNext;
             appliedContentFilter = resourceQuery;
+            var selectedId = pageChanged ? null : (PackResults.SelectedItem as PackSearchCard)?.Project.Id;
             var cards = result.Projects.Select(project => new PackSearchCard(project)).ToArray();
-            PackResults.ItemsSource = cards; PackResults.SelectedItem = cards.FirstOrDefault();
+            PackResults.ItemsSource = cards; PackResults.SelectedItem = cards.FirstOrDefault(card => card.Project.Id == selectedId) ?? cards.FirstOrDefault();
+            if (pageChanged && cards.Length > 0) PackResults.ScrollIntoView(cards[0]);
             PackEmpty.Visibility = result.Projects.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             PackEmpty.Text = result.Notices.Count > 0 ? string.Join("\n", result.Notices) : "没有匹配结果，请调整筛选条件。";
             CatalogEmptyHint.Text = "试试简短的名称、选择全部版本，或重置筛选条件。";
-            PackSummary.Text = $"Modrinth · 本页 {result.Projects.Count} 项 / 共 {result.Total:N0} 项" + (result.Notices.Count > 0 ? " · " + string.Join("；", result.Notices) : "");
+            SetCatalogStatus(string.Join("；", result.Notices));
             PackPageLabel.Text = $"第 {pageIndex + 1} 页";
         }
         catch (OperationCanceledException)
@@ -217,7 +221,7 @@ public partial class DownloadCenter : UserControl
             if (!closed && searchCancellation == cancellation)
             {
                 PackEmpty.Text = "搜索已取消或超时"; CatalogEmptyHint.Text = "检查网络后重新搜索，或调整筛选条件。";
-                PackSummary.Text = PackResults.Items.Count > 0 ? "搜索已取消，保留上次结果。" : "搜索已取消，可重新搜索。";
+                SetCatalogStatus(PackResults.Items.Count > 0 ? "搜索已取消，保留上次结果。" : "搜索已取消，可重新搜索。");
             }
         }
         catch (Exception ex)
@@ -225,7 +229,7 @@ public partial class DownloadCenter : UserControl
             if (!closed && searchCancellation == cancellation)
             {
                 PackEmpty.Text = "暂时无法完成搜索"; CatalogEmptyHint.Text = "请检查网络后重新搜索。";
-                PackSummary.Text = "搜索未完成，请检查网络后重试。" + (PackResults.Items.Count > 0 ? "（保留上次结果）" : "");
+                SetCatalogStatus("搜索未完成，请检查网络后重试。" + (PackResults.Items.Count > 0 ? "（保留上次结果）" : ""));
                 PackSummary.ToolTip = ex.Message;
             }
         }
@@ -241,15 +245,16 @@ public partial class DownloadCenter : UserControl
     private void OpenPack(object sender, RoutedEventArgs e)
     {
         if (searchCancellation is not null) return;
-        if (PackResults.SelectedItem is not PackSearchCard card) { PackSummary.Text = "请先选择一个" + CatalogLabel + "。"; return; }
+        if (PackResults.SelectedItem is not PackSearchCard card) { SetCatalogStatus("请先选择一个" + CatalogLabel + "。"); return; }
         if (contentKind is not null) { OpenContent(card.Project); return; }
         var project = card.Project;
         var dialog = new PackReleaseWindow(OwnerWindow, project, appliedFilter, DownloadAvailability.Snapshot(settings()), service, (request, snapshot, pack) => Enqueue(request, snapshot, pack));
         dialog.ShowDialog();
     }
-    private void OpenPackDoubleClick(object sender, MouseButtonEventArgs e)
+    private void OpenPackRow(object sender, MouseButtonEventArgs e)
     {
-        if (e.OriginalSource is DependencyObject element && ItemsControl.ContainerFromElement(PackResults, element) is ListBoxItem) OpenPack(sender, e);
+        if (e.OriginalSource is DependencyObject element && ItemsControl.ContainerFromElement(PackResults, element) is ListBoxItem row)
+        { PackResults.SelectedItem = row.DataContext; e.Handled = true; OpenPack(sender, e); }
     }
     private void PackKey(object sender, KeyEventArgs e) { if (e.Key == Key.Enter) { e.Handled = true; OpenPack(sender, e); } }
     private async void ImportClick(object sender, RoutedEventArgs e)
@@ -257,20 +262,34 @@ public partial class DownloadCenter : UserControl
         var picker = new OpenFileDialog { Title = "导入本地整合包", Filter = "整合包|*.mrpack;*.zip" };
         if (picker.ShowDialog(OwnerWindow) == true) await ImportAsync(picker.FileName);
     }
+    internal bool IsPreparingArchive => preparing;
+    private void CancelArchiveImport(object sender, RoutedEventArgs e) => importCancellation?.Cancel();
+    internal bool CanImportArchive => initialized && !preparing && !closed && canInstall();
     internal async Task ImportAsync(string path)
     {
-        if (preparing || closed) return;
-        preparing = true; var snapshot = DownloadAvailability.Snapshot(settings());
+        if (!CanImportArchive) return;
+        preparing = true;
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        importCancellation = cancellation;
+        ArchiveImportStatus.Text = "正在识别整合包：" + Path.GetFileName(path);
+        ArchiveImportStatusPanel.Visibility = Visibility.Visible;
+        var snapshot = DownloadAvailability.Snapshot(settings());
         try
         {
-            var pack = await service.InspectAsync(path, lifetime.Token); lifetime.Token.ThrowIfCancellationRequested();
+            // Paint feedback before starting even a synchronously completing provider.
+            await Dispatcher.Yield(DispatcherPriority.Render);
+            cancellation.Token.ThrowIfCancellationRequested();
+            var pack = await service.InspectAsync(path, cancellation.Token).WaitAsync(cancellation.Token);
+            cancellation.Token.ThrowIfCancellationRequested();
+            if (!canInstall()) throw new InvalidOperationException("请等待当前启动任务或游戏结束后再导入整合包。");
+            ArchiveImportStatusPanel.Visibility = Visibility.Collapsed;
             DownloadAvailability.RequireSupported(pack);
             var confirmation = new PackConfirmationWindow(OwnerWindow, pack, snapshot);
             if (confirmation.ShowDialog() == true) Enqueue(confirmation.Request!, confirmation.Settings, pack);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { if (!closed) MessageWindow.Inform(OwnerWindow, ex.Message, "整合包导入未完成"); }
-        finally { preparing = false; }
+        finally { preparing = false; importCancellation = null; ArchiveImportStatusPanel.Visibility = Visibility.Collapsed; }
     }
     private void Changed(object? sender, EventArgs e) { if (!closed) { UpdateQueue(); QueueChanged?.Invoke(this, EventArgs.Empty); } }
     private void Settled(DownloadTask task) { if (!closed && task.State == DownloadTaskState.Completed) installed?.Invoke(task); }

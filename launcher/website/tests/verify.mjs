@@ -13,7 +13,7 @@ vm.runInNewContext(read("site.config.js"), sandbox);
 vm.runInNewContext(read("links.js"), sandbox);
 const resolve = sandbox.window.ISLAND_RESOLVE_LINKS;
 const config = sandbox.window.ISLAND_SITE;
-check(config.version === "0.10.22" && resolve(config).repository === "https://github.com/yosumi-maya/ISLAND-Launcher", "Published project and current version point to the owner's new launcher repository");
+check(config.version === "0.20.19" && resolve(config).repository === "https://github.com/yosumi-maya/ISLAND-Launcher", "Published project and current version point to the owner's new launcher repository");
 check(resolve({}).download === null && resolve({}).repository === null, "Empty configuration creates no active GitHub or download destination");
 for (const bad of ["javascript:alert(1)", "http://github.com/owner/project", "https://github.com.evil.example/owner/project", "https://github.com/owner", "https://user:secret@github.com/owner/project", "https://example.com/owner/project"]) {
   check(resolve({ githubRepoUrl: bad, githubReleaseUrl: bad }).download === null, "Invalid / non-GitHub destinations cannot activate download: " + bad.replace("user:secret@", ""));
@@ -49,7 +49,7 @@ for (const name of ["index.html", "privacy.html"]) {
 }
 check(!/localStorage|sessionStorage|document\.cookie|\bfetch\s*\(|XMLHttpRequest/.test(app), "The website performs no tracking storage or API requests");
 check(/prefers-reduced-motion:reduce/.test(read("styles.css")) && app.includes("prefers-reduced-motion: reduce"), "Pointer effects honor the visitor's reduced-motion preference");
-check(Object.values(config.screenshots).every(value => value === ""), "Screenshot slots remain empty pending owner-supplied images");
+check(Object.keys(config.screenshots).join(",") === "light,glass" && config.screenshots.light === "./assets/launcher-light.png" && config.screenshots.glass === "./assets/launcher-glass.png", "Only the two owner-supplied screenshots are configured");
 check(read("index.html").includes('id="main-placeholder"') && !/id="main-screenshot"[^>]*\bsrc=/.test(read("index.html")), "Missing screenshots show an explicit placeholder without broken-image requests");
 check(app.includes('mainImage.onerror') && app.includes('screenshotRevision'), "Failed and stale image loads preserve the placeholder");
 check(read("_headers").includes("script-src 'self'") && read("_headers").includes("frame-ancestors 'none'"), "Cloudflare static headers restrict scripts and framing");

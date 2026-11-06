@@ -1,4 +1,4 @@
-using System.Net.Http.Headers;
+﻿using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
@@ -19,7 +19,7 @@ public sealed partial class MicrosoftAuth : IDisposable
     {
         http = new HttpClient(handler ?? CreateHandler(verifyCertificates));
         http.Timeout = TimeSpan.FromSeconds(45);
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("IslandLauncher/0.10.24");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("IslandLauncher/0.20.19");
     }
     internal static HttpClientHandler CreateHandler(bool verifyCertificates)
     {
@@ -71,6 +71,7 @@ public sealed partial class MicrosoftAuth : IDisposable
         var result = await ExchangeAsync(account.ClientId, data, token);
         result.Account.Id = account.Id;
         if (result.Account.SkinUrl == account.SkinUrl) result.Account.SkinPng = account.SkinPng;
+        if (result.Account.ActiveCapeId == account.ActiveCapeId) result.Account.CapePng = account.CapePng;
         return result;
     }
     private async Task<AuthResult> ExchangeAsync(string clientId, JsonObject oauth, CancellationToken token)

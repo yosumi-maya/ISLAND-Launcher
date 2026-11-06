@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -45,7 +45,7 @@ internal static class AppearanceUiTests
         check(!Children<AppearanceEditor>(settings).Any() && window.FindName("OpenAppearanceButton") is Button && Children<WrapPanel>(settings).Any(panel => panel.Name == "ThemePresetButtons"),
             "Launcher settings contain theme presets and the entry to the full appearance editor");
         await VerifyQuickSettings(window, store, check, capture);
-        Click(settings, "打开外观设置  →"); window.UpdateLayout();
+        ((Button)window.FindName("OpenAppearanceButton")).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)); window.UpdateLayout();
         var page = (Grid)window.FindName("AppearancePage");
         check(page.Visibility == Visibility.Visible && settings.Visibility == Visibility.Collapsed && !Children<Button>(page).Any(button => button.Name == "ThemePresetButton"),
             "Appearance button opens the dedicated editor without duplicating quick theme presets");
@@ -91,7 +91,7 @@ internal static class AppearanceUiTests
         ((RadioButton)window.FindName("NavLibrary")).IsChecked = true; window.UpdateLayout(); await Task.Delay(180);
         check(AppearanceRenderer.Current.Window == committedBackground && draft.Current.Window.Color == "#72B4E0",
             "Leaving the editor retains the draft without applying it to the launcher");
-        Click(settings, "打开外观设置  →"); window.UpdateLayout();
+        ((Button)window.FindName("OpenAppearanceButton")).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)); window.UpdateLayout();
         Click(editor, "重置全部背景与材质");
         await Preview(() => draft.Current.Window.Material == SurfaceMaterial.Solid && draft.Current.WindowOpacity == 1);
         Select(SurfaceArea.Instances);
@@ -236,7 +236,7 @@ internal static class AppearanceUiTests
             && AppearanceRenderer.Current.LaunchBar.Material == SurfaceMaterial.LiquidGlass, "A new launcher window restores images, new materials and native opacity");
         restored.Close();
         ((RadioButton)window.FindName("NavSettings")).IsChecked = true; window.UpdateLayout();
-        Click(settings, "打开外观设置  →"); window.UpdateLayout(); Select(SurfaceArea.Window);
+        ((Button)window.FindName("OpenAppearanceButton")).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)); window.UpdateLayout(); Select(SurfaceArea.Window);
         Control<Slider>(editor, "WindowOpacity").Value = 100;
         Click(editor, "使用纯色");
         Material(SurfaceMaterial.Gaussian);
@@ -271,7 +271,7 @@ internal static class AppearanceUiTests
         AppearanceRenderer.Apply(store.Load().Appearance, store.Load().ThemeColor);
         ((ScrollViewer)window.FindName("AppearanceSettingsScroll")).ScrollToTop(); window.UpdateLayout(); capture(window, "AppearanceDefaults");
         Click(page, "← 返回设置"); check(page.Visibility == Visibility.Collapsed && settings.Visibility == Visibility.Visible, "Back returns to launcher settings");
-        Click(settings, "打开外观设置  →"); window.UpdateLayout(); Select(SurfaceArea.Instances);
+        ((Button)window.FindName("OpenAppearanceButton")).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)); window.UpdateLayout(); Select(SurfaceArea.Instances);
         Control<CheckBox>(editor, "FollowSurfaceTheme").IsChecked = false; Control<TextBox>(editor, "SurfaceColorBox").Text = "#bad";
         Select(SurfaceArea.Hero);
         check(editor.SelectedArea == SurfaceArea.Instances && preview.SelectedArea == SurfaceArea.Instances, "Invalid color keeps the preview selection and unsaved field together");
@@ -364,7 +364,7 @@ internal static class AppearanceUiTests
         var restored = new MainWindow(store) { Left = -16000, Top = 0, WindowStartupLocation = WindowStartupLocation.Manual, ShowInTaskbar = false };
         restored.Show(); restored.UpdateLayout();
         check(AppearanceRenderer.Current.Content.Opacity == .18 && ((SolidColorBrush)((Button)restored.FindName("LaunchButton")).Background).Color == (Color)ColorConverter.ConvertFromString("#00AAC8")
-            && Children<Button>((WrapPanel)restored.FindName("ThemePresetButtons")).Single(button => button.Tag as string == "#00AAC8").BorderThickness.Left == 2,
+            && Children<Button>((WrapPanel)restored.FindName("ThemePresetButtons")).Single(button => button.Tag as string == "#00AAC8").BorderThickness.Left == 1,
             "A fresh window restores the immediately saved glass theme and its active preset indicator"); restored.Close();
         Preset("#EC4899"); window.UpdateLayout();
         check(store.Load().Appearance.Window.ImagePath.Length == 0 && store.Load().Appearance.Instances.Material == SurfaceMaterial.Solid && store.Load().Appearance.Content.Opacity == 1,

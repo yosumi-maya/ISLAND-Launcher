@@ -1,4 +1,4 @@
-using System.Windows.Media;
+﻿using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.ComponentModel;
 using BlockDock.Core;
@@ -32,10 +32,14 @@ public sealed class InstanceCard(InstalledInstance instance, InstancePreferences
         foreach (var name in new[] { nameof(Star), nameof(IsFavorite), nameof(FavoriteGlyph), nameof(FavoriteTip) }) PropertyChanged?.Invoke(this, new(name));
     }
     public string LastPlayed => Preferences.LastPlayed is { } date ? "上次游玩 " + date.ToLocalTime().ToString("MM.dd HH:mm") : "一个崭新的世界";
-    public string Glyph => Instance.Loader switch { "Fabric" or "Quilt" => "\uE8A5", "Forge" or "NeoForge" or "Cleanroom" => "\uE90F", _ => "\uE80F" };
-    public string IconBackground => Instance.Loader switch { "Fabric" => "#EEE9DD", "Forge" => "#E5E9EE", "NeoForge" => "#F4E9DA", "Cleanroom" => "#DDEDE8", "Quilt" => "#EDE4F4", _ => "#DFEBD4" };
-    public string IconForeground => Instance.Loader switch { "Fabric" => "#8A7956", "Forge" => "#677D90", "NeoForge" => "#B88746", "Cleanroom" => "#4F8074", "Quilt" => "#7856A4", _ => "#5D804B" };
-    public ImageSource? Icon { get; } = LoadIcon(instance);
+    public ImageSource Icon { get; } = ResolveIcon(instance, preferences);
+    private static ImageSource ResolveIcon(InstalledInstance instance, InstancePreferences preferences)
+    {
+        if (preferences.IconPng is not null)
+            try { return InstanceIcons.Decode(preferences.IconPng); } catch (Exception ex) when (ex is IOException or ArgumentException or NotSupportedException or InvalidOperationException or FileFormatException or System.Runtime.InteropServices.COMException) { }
+        if (InstanceIcons.Contains(preferences.IconKey)) return InstanceIcons.Builtin(preferences.IconKey);
+        return LoadIcon(instance) ?? InstanceIcons.Default(instance.Loader);
+    }
     private static ImageSource? LoadIcon(InstalledInstance instance)
     {
         foreach (var path in instance.LocalIconPaths)

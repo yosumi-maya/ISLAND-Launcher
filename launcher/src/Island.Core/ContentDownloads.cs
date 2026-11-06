@@ -17,12 +17,17 @@ public sealed record ContentFilter(ContentKind Kind, string Query = "", string M
 public sealed record ContentFile(string ProjectId, string VersionId, ContentKind Kind, string Name, string FileName, string Url, long Size, string Sha1, string Sha512)
 {
     public IReadOnlyList<ContentConflict> Incompatibilities { get; init; } = [];
+    public bool IsDependency { get; init; }
+    public string ProjectSlug { get; init; } = "";
+    public string ReleaseVersion { get; init; } = "";
 }
 public sealed record ContentConflict(string ProjectId, string VersionId);
 public sealed record ContentPlan(ContentTarget Target, string Name, string? IconUrl, IReadOnlyList<ContentFile> Files)
 {
     public IReadOnlyList<ContentConflict> Incompatibilities { get; init; } = [];
-    public IReadOnlyList<string> TargetFiles => Files.Select(file => ContentDownloads.Destination(Target, file)).ToArray();
+    public IReadOnlyList<string> SkippedDependencies { get; init; } = [];
+    public IReadOnlyList<ContentFile> InstallFiles => Files.Where(file => !file.IsDependency || !SkippedDependencies.Contains(file.ProjectId, StringComparer.Ordinal)).ToArray();
+    public IReadOnlyList<string> TargetFiles => InstallFiles.Select(file => ContentDownloads.Destination(Target, file)).ToArray();
     public string Summary => $"安装到：{Target.Display}\n{Target.RuntimeDirectory}\n\n" + string.Join("\n", Files.Select(file => $"{ContentDownloads.Label(file.Kind)} · {file.FileName}"));
 }
 public interface IContentDownloads
@@ -167,13 +172,18 @@ public sealed class ContentDownloads(Func<AppSettings, DownloadClient>? networkF
             if (sha512.Length != 128 || !sha512.All(Uri.IsHexDigit) || sha1.Length != 40 || !sha1.All(Uri.IsHexDigit)) throw new InvalidDataException("资源缺少有效的 SHA-1 / SHA-512 校验值。");
             var url = Text(artifact, "url");
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != "https") throw new InvalidDataException("资源下载链接必须为 HTTPS。");
-            var file = new ContentFile(projectId, versionId, kind, Text(info, "title"), Text(artifact, "filename"), url, artifact["size"]?.GetValue<long>() ?? 0, sha1, sha512) { Incompatibilities = Array.AsReadOnly(releaseConflicts.ToArray()) };
+            var file = new ContentFile(projectId, versionId, kind, Text(info, "title"), Text(artifact, "filename"), url, artifact["size"]?.GetValue<long>() ?? 0, sha1, sha512)
+            {
+                Incompatibilities = Array.AsReadOnly(releaseConflicts.ToArray()), IsDependency = projectId != project.Id,
+                ProjectSlug = Text(info, "slug"), ReleaseVersion = Text(data, "version_number")
+            };
             if (file.Size <= 0) throw new InvalidDataException("资源文件大小无效。");
             _ = Destination(target, file); files.Add(file);
         }
         await Resolve(project.Id, version.Id, filter.Kind);
         if (files.Select(file => Destination(target, file)).Distinct(StringComparer.OrdinalIgnoreCase).Count() != files.Count) throw new InvalidDataException("资源和前置包含同名文件，无法自动安装。");
-        CheckInstalled(target, files, installed); CheckIncompatible(target, files, installed, incompatible);
+        var mainFiles = files.Where(file => !file.IsDependency).ToArray();
+        CheckInstalled(target, mainFiles, installed); CheckIncompatible(target, mainFiles, installed, mainFiles.SelectMany(file => file.Incompatibilities));
         return new(target, project.Title, project.IconUrl, Array.AsReadOnly(files.ToArray())) { Incompatibilities = Array.AsReadOnly(incompatible.ToArray()) };
     }
     public async Task<string> InstallAsync(AppSettings settings, ContentPlan plan, IProgress<InstallProgress> progress, CancellationToken token)
@@ -181,14 +191,29 @@ public sealed class ContentDownloads(Func<AppSettings, DownloadClient>? networkF
         ValidateTarget(plan.Target);
         if (plan.Files.Count is 0 or > 64) throw new InvalidDataException("资源安装清单无效。");
         foreach (var file in plan.Files) ValidateFile(plan.Target, file);
+        if (plan.SkippedDependencies.Any(id => !plan.Files.Any(file => file.ProjectId == id && file.IsDependency))) throw new InvalidDataException("只能跳过清单中的前置资源。");
+        var requested = plan.InstallFiles;
+        if (requested.Count == 0) throw new InvalidDataException("安装清单没有本次要安装的资源。");
         var statePath = SafePaths.Under(plan.Target.RuntimeDirectory, ".island/content.json"); Directory.CreateDirectory(Path.GetDirectoryName(statePath)!);
         await using var guard = new FileStream(SafePaths.Under(plan.Target.RuntimeDirectory, ".island/content-install.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-        var installed = ReadInstalled(plan.Target); CheckInstalled(plan.Target, plan.Files, installed);
-        CheckIncompatible(plan.Target, plan.Files, installed, plan.Incompatibilities);
+        var installed = ReadInstalled(plan.Target); CheckInstalled(plan.Target, requested, installed);
+        CheckIncompatible(plan.Target, requested, installed, requested.SelectMany(file => file.Incompatibilities));
+        var inspection = await ContentInstallationInspector.InspectAsync(plan, token);
+        var older = inspection.FirstOrDefault(match => match.Enabled && match.Kind == ContentMatchKind.ManagedOtherVersion && requested.Any(file => file.ProjectId == match.ProjectId));
+        if (older is not null) throw new IOException("已安装该资源的其他版本，未添加重复文件：" + Path.GetFileName(older.Path) + "。请先移除旧版本，或在安装清单中取消勾选此前置。");
         using var network = Network(settings); var staged = new List<(ContentFile File, string Cache, string Target)>();
-        for (var i = 0; i < plan.Files.Count; i++)
+        var recorded = new List<ContentFile>();
+        for (var i = 0; i < requested.Count; i++)
         {
-            var file = plan.Files[i]; var target = Destination(plan.Target, file);
+            var file = requested[i]; var target = Destination(plan.Target, file);
+            var existing = inspection.FirstOrDefault(match => match.ProjectId == file.ProjectId && match.Confirmed);
+            if (existing is not null && await DownloadClient.ValidAsync(existing.Path, new TransferFile(existing.Path, [file.Url], file.Size, file.Sha1, file.Sha512), token))
+            {
+                // Keep the actual local name when it can be represented by a managed resource entry.
+                if (Path.GetFileName(existing.Path).Length <= 220) recorded.Add(file with { FileName = Path.GetFileName(existing.Path) });
+                continue;
+            }
+            recorded.Add(file);
             var transfer = new TransferFile(target, [file.Url], file.Size, file.Sha1, file.Sha512);
             if (File.Exists(target))
             {
@@ -196,8 +221,8 @@ public sealed class ContentDownloads(Func<AppSettings, DownloadClient>? networkF
                 continue;
             }
             var cache = SafePaths.Under(plan.Target.RuntimeDirectory, ".island/content-downloads/" + file.Sha512 + ".cache");
-            await network.DownloadAsync(transfer with { Path = cache }, token, _ => progress.Report(new("下载资源", file.FileName, i, plan.Files.Count, network.Bytes, network.Speed)));
-            staged.Add((file, cache, target)); progress.Report(new("校验资源", file.FileName, i + 1, plan.Files.Count, network.Bytes, network.Speed));
+            await network.DownloadAsync(transfer with { Path = cache }, token, _ => progress.Report(new("下载资源", file.FileName, i, requested.Count, network.Bytes, network.Speed)));
+            staged.Add((file, cache, target)); progress.Report(new("校验资源", file.FileName, i + 1, requested.Count, network.Bytes, network.Speed));
         }
         token.ThrowIfCancellationRequested(); ValidateTarget(plan.Target);
         var committed = new List<string>(); var temporary = SafePaths.Under(plan.Target.RuntimeDirectory, ".island/content.json.tmp");
@@ -208,7 +233,7 @@ public sealed class ContentDownloads(Func<AppSettings, DownloadClient>? networkF
                 token.ThrowIfCancellationRequested(); var target = Destination(plan.Target, item.File); Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                 File.Move(item.Cache, target, false); committed.Add(target);
             }
-            var updated = installed.Where(old => !plan.Files.Any(file => file.ProjectId == old.ProjectId)).Concat(plan.Files).ToArray();
+            var updated = installed.Where(old => !recorded.Any(file => file.ProjectId == old.ProjectId)).Concat(recorded).ToArray();
             await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(updated, new JsonSerializerOptions { WriteIndented = true }), token);
             token.ThrowIfCancellationRequested(); File.Move(temporary, statePath, true);
         }
@@ -218,6 +243,6 @@ public sealed class ContentDownloads(Func<AppSettings, DownloadClient>? networkF
             throw;
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
-        return $"已安装 {plan.Name}（含 {Math.Max(0, plan.Files.Count - 1)} 个必需前置）→ {plan.Target.RuntimeDirectory}";
+        return $"已安装 {plan.Name}（本次选择 {requested.Count(file => file.IsDependency)} 个前置，跳过 {plan.SkippedDependencies.Count} 个）→ {plan.Target.RuntimeDirectory}";
     }
 }

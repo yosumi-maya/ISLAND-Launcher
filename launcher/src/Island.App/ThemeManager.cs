@@ -35,8 +35,8 @@ public static class ThemeManager
         var primaryHover = Mix(accent, dark ? Colors.White : Colors.Black, .09);
         var primaryPressed = Mix(accent, dark ? Colors.White : Colors.Black, .16);
         var onAccent = Contrast(Colors.White, accent) > Contrast(Colors.Black, accent) ? Colors.White : Colors.Black;
-        var hero = dark ? Hex("#173B36") : Mix(accent, Colors.Black, .4);
-        var heroSurface = dark ? Hex("#224B43") : Mix(accent, Colors.Black, .22);
+        var hero = soft;
+        var heroSurface = surface;
         var colors = new Dictionary<string, Color>
         {
             ["Accent"] = accent, ["OnAccent"] = onAccent, ["AccentInk"] = Readable(accent, soft),
@@ -49,7 +49,7 @@ public static class ThemeManager
             ["OnPrimaryHover"] = Readable(onAccent, primaryHover), ["OnPrimaryPressed"] = Readable(onAccent, primaryPressed),
             ["NoticeBackground"] = Hex(dark ? "#243A40" : "#E8F0ED"), ["NoticeInk"] = Hex(dark ? "#C5DDD3" : "#3B594E"),
             ["HeroBackground"] = hero, ["HeroSurface"] = heroSurface,
-            ["HeroBorder"] = dark ? Hex("#4E7B6F") : Mix(accent, Colors.White, .18), ["HeroText"] = Readable(Hex("#F1F7F3"), heroSurface), ["HeroMuted"] = Readable(Hex("#C6D9CD"), heroSurface),
+            ["HeroBorder"] = Hex(dark ? "#3A5055" : "#D3DFD8"), ["HeroText"] = ink, ["HeroMuted"] = muted,
             ["ScrollThumb"] = Hex(dark ? "#56746B" : "#A7BCB0"), ["ScrollHover"] = Hex(dark ? "#8EAD9F" : "#718F7D")
         };
         var target = resources ?? Application.Current.Resources;

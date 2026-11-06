@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Island.Core;
 
 internal static class AppearanceTests
@@ -8,6 +8,15 @@ internal static class AppearanceTests
         var legacy = JsonSerializer.Deserialize<LauncherState>("{}")!;
         check(!legacy.Appearance.HideSidebarDoll && legacy.Appearance.WindowOpacity == 1 && Enum.GetValues<SurfaceArea>().All(area => legacy.Appearance.For(area).Opacity == 1),
             "Older settings keep the paper doll visible and retain opaque default backgrounds");
+        var oldHero = JsonSerializer.Deserialize<LauncherAppearance>("""{"Hero":{"ImageTint":0.4,"DefaultIllustration":true}}""")!.Normalize();
+        check(oldHero.PaletteVersion == 1 && !oldHero.Hero.DefaultIllustration && oldHero.Normalize() == oldHero,
+            "Untouched old hero migrates once to the plain account palette and stays stable");
+        foreach (var custom in new[] { new SurfaceAppearance { ImageTint = .4, Color = "#123456" },
+            new SurfaceAppearance { ImageTint = .4, ImagePath = "custom.png" }, new SurfaceAppearance { ImageTint = .4, Material = SurfaceMaterial.Gaussian } })
+            check(new LauncherAppearance { Hero = custom }.Normalize().Hero == custom,
+                "Palette migration preserves an explicit hero color, image or material");
+        check(new LauncherAppearance { PaletteVersion = 1, Hero = new() { ImageTint = .4 } }.Normalize().Hero.DefaultIllustration,
+            "A migrated profile can retain an explicit illustration without repeated migration");
         var oldMaterials = JsonSerializer.Deserialize<LauncherAppearance>("""{"Window":{"Material":0},"Hero":{"Material":1},"Instances":{"Material":2},"Panels":{"Material":3}}""")!.Normalize();
         check(oldMaterials.Window.Material == SurfaceMaterial.Solid && oldMaterials.Hero.Material == SurfaceMaterial.Gaussian
             && oldMaterials.Instances.Material == SurfaceMaterial.Gaussian && oldMaterials.Panels.Material == SurfaceMaterial.Gaussian && oldMaterials.Panels.BlurRadius == 64,
@@ -17,8 +26,10 @@ internal static class AppearanceTests
         var oldOff = JsonSerializer.Deserialize<LauncherAppearance>("""{"CardHoverEffects":false}""")!.Normalize();
         var oldOn = JsonSerializer.Deserialize<LauncherAppearance>("""{"CardHoverEffects":true}""")!.Normalize();
         check(oldOff.CardAnimation == CardAnimationMode.Off && oldOn.CardAnimation == CardAnimationMode.FloatTilt, "Old card motion switches migrate to Off / the original floating-follow animation");
-        foreach (var json in new[] { """{"CardHoverEffects":false,"CardAnimation":5}""", """{"CardAnimation":5,"CardHoverEffects":false}""" })
-            check(JsonSerializer.Deserialize<LauncherAppearance>(json)!.Normalize().CardAnimation == CardAnimationMode.Magnetic, "An explicit animation choice takes priority over the legacy switch in either JSON property order");
+        foreach (var json in new[] { """{"CardHoverEffects":false,"CardAnimation":2}""", """{"CardAnimation":2,"CardHoverEffects":false}""" })
+            check(JsonSerializer.Deserialize<LauncherAppearance>(json)!.Normalize().CardAnimation == CardAnimationMode.Lift, "An explicit animation choice takes priority over the legacy switch in either JSON property order");
+        foreach (var mode in new[] { CardAnimationMode.Zoom, CardAnimationMode.Spring, CardAnimationMode.Magnetic })
+            check(new LauncherAppearance { CardAnimation = mode }.Normalize().CardAnimation == CardAnimationMode.FloatTilt, "Removed animation choices migrate to floating follow: " + mode);
         check(JsonSerializer.Deserialize<LauncherAppearance>("""{"CardAnimation":999}""")!.Normalize().CardAnimation == CardAnimationMode.FloatTilt, "Unknown card animation values recover to the existing effect");
         check(oldMaterials.Content.Material == SurfaceMaterial.Solid && oldMaterials.Content.Opacity == 1
             && (int)SurfaceArea.RecentMap == 6 && (int)SurfaceArea.Content == 7,
@@ -41,8 +52,8 @@ internal static class AppearanceTests
         {
             state.Appearance.CardAnimation = mode; store.Save(state);
             using var saved = JsonDocument.Parse(File.ReadAllText(Path.Combine(store.DirectoryPath, "settings.json")));
-            check(store.Load().Appearance.CardAnimation == mode && saved.RootElement.GetProperty("Appearance").GetProperty("CardHoverEffects").GetBoolean() == (mode != CardAnimationMode.Off),
-                "Animation choice survives a settings roundtrip and keeps the older switch consistent: " + mode);
+            check(store.Load().Appearance.CardAnimation == new LauncherAppearance { CardAnimation = mode }.Normalize().CardAnimation && saved.RootElement.GetProperty("Appearance").GetProperty("CardHoverEffects").GetBoolean() == (mode != CardAnimationMode.Off),
+                "Supported and migrated animation choices persist with a consistent legacy switch: " + mode);
         }
         check(restored.HideSidebarDoll && restored.WindowOpacity == .64 && restored.Window.ImagePath != restored.Hero.ImagePath && restored.Hero.ImagePath == options.Hero.ImagePath,
             "Paper doll visibility, window opacity and independent background image paths persist");

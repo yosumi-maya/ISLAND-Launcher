@@ -1,11 +1,21 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using Island.App;
 using Island.Core;
 
 internal static class InstanceContextMenuUiTests
 {
+    private static IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T item) yield return item;
+            foreach (var nested in Descendants<T>(child)) yield return nested;
+        }
+    }
     public static async Task RunAsync(Window owner, string root, Action<bool, string> check, Action<Window, string> capture, string? captures)
     {
         var isolated = Path.Combine(root, "instance-menu", "isolated"); var shared = Path.Combine(root, "instance-menu", "shared");
@@ -60,7 +70,24 @@ internal static class InstanceContextMenuUiTests
             _ = window.Dispatcher.BeginInvoke(new Action(() =>
             {
                 var dialog = Application.Current.Windows.OfType<InstanceWindow>().Single();
-                try { managementChecked = dialog.Title == target.DisplayName; }
+                try
+                {
+                    dialog.UpdateLayout(); managementChecked = dialog.Title == target.DisplayName;
+                    var rows = Descendants<InstanceSettingRow>(dialog).ToArray();
+                    check(rows.Length == 3 && rows.All(row => !row.Expanded), "Instance runtime settings start as three compact collapsed rows");
+                    check(rows[0].Summary.Contains("全局") && rows[1].Summary.Contains("自动"), "Collapsed settings show inherited Java and memory summaries");
+                    capture(dialog, "Instance-Settings-Collapsed");
+                    rows[1].Expanded = true; dialog.UpdateLayout();
+                    check(Descendants<MemoryAllocationEditor>(dialog).Single().IsVisible, "Memory settings expand inside their row");
+                    capture(dialog, "Instance-Settings-Memory");
+                    var independent = Descendants<CheckBox>(dialog).Single(box => box.Name == "IndependentRuntimeBox"); independent.IsChecked = true;
+                    var memory = Descendants<MemoryAllocationEditor>(dialog).Single(); memory.Automatic = false; memory.ManualMemoryMb = 6144;
+                    check(memory.IsEnabled && rows[1].Summary.Contains("6.0"), "Independent memory edits update the compact summary");
+                    rows[1].Expanded = false; rows[2].Expanded = true; dialog.UpdateLayout(); capture(dialog, "Instance-Settings-Advanced");
+                    rows[2].Expanded = false; rows[0].Expanded = true; dialog.UpdateLayout(); capture(dialog, "Instance-Settings-Java");
+                    independent.IsChecked = false;
+                    check(!memory.IsEnabled && rows[1].Summary.Contains("全局"), "Returning to global settings restores the inherited summary");
+                }
                 finally { dialog.Close(); }
             }));
             Click(Open(target), "实例管理"); check(managementChecked, "Instance management remains reachable through the card context menu");

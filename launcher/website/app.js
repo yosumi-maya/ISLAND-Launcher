@@ -3,7 +3,7 @@
   var config = window.ISLAND_SITE || {};
   var links = window.ISLAND_RESOLVE_LINKS(config);
   var language = new URLSearchParams(window.location.search).get("lang") === "en" ? "en" : "zh";
-  var currentTheme = "forest";
+  var currentTheme = "light";
   var currentMotion = "tilt";
   var reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   var originalText = new Map();
@@ -147,20 +147,21 @@
   Object.assign(en, {
   "brand.subtitle": "Island Launcher",
   "nav.faq": "FAQ",
-  "nav.download": "Get ISLAND",
+  "nav.download": "Download for Windows",
   "hero.title": "Your next adventure\nstarts here.",
   "hero.description": "The worlds you return to. The mods you love. The way you like things.\nBring them together in your own little island.",
   "hero.preview": "Windows development preview",
   "hero.art": "A place for every world.",
   "hero.platform": "Windows x64 · Portable · MIT open source",
   "hero.explore": "Take a look inside",
-  "showcase.title": "Familiar worlds. A fresh way in.",
-  "showcase.description": "A different palette. The same familiar home.",
+  "showcase.title": "Familiar worlds.\nA fresh way in.",
+  "showcase.description": "Simple and intuitive. Focused on the games you care about, with familiar controls and a fresh look.",
+  "appearance.zoom": "Enlarge the glass theme screenshot",
+  "appearance.image": "The actual ISLAND launcher interface in the glass theme",
   "showcase.pending": "Application screenshots coming soon",
   "showcase.pendingNote": "This space will show the real launcher interface.",
-  "theme.forest": "Tundra teal",
-  "theme.rose": "Rose",
-  "theme.glass": "Island night",
+  "theme.light": "Light",
+  "theme.glass": "Glass",
   "showcase.caption": "ISLAND Launcher / Windows desktop application",
   "showcase.captionRight": "Your instances. Your style.",
   "features.title": "Less organizing.\nMore playing.",
@@ -224,7 +225,7 @@
 });
   var dynamic = {
     zh: {
-      download: "前往 GitHub 下载", unavailable: "下载即将开放",
+      download: "下载 Windows 版", unavailable: "下载即将开放",
       downloadNote: "下载通过 GitHub Releases 提供，请以发布页的文件和说明为准。",
       unavailableNote: "下载尚未开放。发布后将通过 GitHub Releases 提供。",
       linkUnavailable: "项目发布后开放", motionReduced: "已遵循系统的减少动态效果偏好。",
@@ -240,7 +241,7 @@
       }
     },
     en: {
-      download: "Download on GitHub", unavailable: "Downloads coming soon",
+      download: "Download for Windows", unavailable: "Downloads coming soon",
       downloadNote: "Downloads are provided through GitHub Releases. Check the release page for files and instructions.",
       unavailableNote: "Downloads have not opened yet. Releases will be available on GitHub.",
       linkUnavailable: "Available when the project is published", motionReduced: "Your system's reduced-motion preference is respected.",
@@ -340,7 +341,7 @@
     var revision = ++screenshotRevision;
     button.hidden = true; placeholder.hidden = false;
     if (!source || !/^\.\/assets\/[a-zA-Z0-9_./-]+\.(png|webp|jpe?g)$/i.test(source) || source.includes('..')) { mainImage.removeAttribute('src'); return; }
-    mainImage.onload = function () { if (revision === screenshotRevision) { button.hidden = false; placeholder.hidden = true; } };
+    mainImage.onload = function () { if (revision === screenshotRevision) { mainImage.width = mainImage.naturalWidth; mainImage.height = mainImage.naturalHeight; button.hidden = false; placeholder.hidden = true; } };
     mainImage.onerror = function () { if (revision === screenshotRevision) { button.hidden = true; placeholder.hidden = false; } };
     mainImage.src = source;
     if (mainImage.complete && mainImage.naturalWidth) mainImage.onload();
@@ -411,4 +412,3 @@
   }
   applyLanguage(false);
 }());
-

@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using Island.Core;
 
@@ -31,6 +31,7 @@ public partial class MainWindow
         var account = selected;
         async Task<AuthResult> Refresh(MicrosoftAuth auth, CancellationToken token)
         {
+            account = state.Accounts.FirstOrDefault(a => a.Id == account.Id) ?? throw new InvalidOperationException("此玩家账号已被移除。");
             var result = await auth.RefreshAsync(account, token);
             var index = state.Accounts.FindIndex(a => a.Id == account.Id);
             if (index < 0) throw new InvalidOperationException("此玩家账号已被移除。");
@@ -56,7 +57,7 @@ public partial class MainWindow
             }
             else account.SkinPng = null;
             store.Save(state); ReloadAccounts(); return account;
-        }, selectSkin);
+        }, selectSkin, account.Microsoft ? () => { OpenCapeWindow(state.Accounts.First(a => a.Id == account.Id)); return state.Accounts.First(a => a.Id == account.Id).CapePng; } : null);
         dialog.ShowDialog();
     }
 }

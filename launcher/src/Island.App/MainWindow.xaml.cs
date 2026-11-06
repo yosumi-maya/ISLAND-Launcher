@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
 using System.Windows;
@@ -36,14 +36,19 @@ public partial class MainWindow : Window
     public MainWindow(LauncherStore? launcherStore = null, Func<IReadOnlyList<string>?>? gameFolderPicker = null, Func<string?>? skinPicker = null, Func<string?>? backgroundPicker = null,
         Func<CancellationToken, Task<MemoryCleanupResult>>? memoryCleaner = null, Func<string, IDisposable>? gpuPreferenceFactory = null, Action<string>? instanceDirectoryOpener = null,
         JavaRuntimeCache? javaRuntimes = null, ILauncherDownloads? downloadService = null, BlockDock.App.DownloadQueue? downloadQueue = null,
-        Func<bool>? confirmDownloadClose = null, IContentDownloads? contentService = null)
+        Func<bool>? confirmDownloadClose = null, IContentDownloads? contentService = null, ITerracottaSession? multiplayerSession = null, Action<string>? instanceRecycler = null)
     {
+        recycleInstance = instanceRecycler ?? RecycleInstanceDirectory;
         store = launcherStore ?? new(); state = store.Load(); ThemeManager.Apply(state.ThemeColor, dark: state.Appearance.DarkTheme);
         JavaRuntimes = javaRuntimes ?? new JavaRuntimeCache(store.DirectoryPath);
         AppearanceRenderer.NativeWindow = false; AppearanceRenderer.Apply(state.Appearance, state.ThemeColor);
         InitializeComponent(); InitializeAppearance(backgroundPicker);
         InitializeDownloads(downloadService, downloadQueue, confirmDownloadClose, contentService);
         InitializeInstanceMenus();
+        MultiplayerPage.Initialize(multiplayerSession ?? new TerracottaSession(store.DirectoryPath),()=>state.Accounts.FirstOrDefault(a=>a.Id==state.SelectedAccountId)?.Name ?? "ISLAND 玩家",()=>
+        {
+            var directory=Path.Combine(store.DirectoryPath,"multiplayer","terracotta-0.4.2","temp","terracotta");Directory.CreateDirectory(directory);OpenPath(directory);
+        });
         // Register the action controls in the window's XAML namescope before
         // placing their row into the reusable memory editor's content slot.
         ((Panel)MemoryOptimizationRow.Parent).Children.Remove(MemoryOptimizationRow);
@@ -59,7 +64,7 @@ public partial class MainWindow : Window
             return browse.ShowDialog(this) == true ? browse.FolderNames : null;
         });
         SourceBox.ItemsSource = new[] { new { Label = "自动选择（推荐）", Source = DownloadSource.Auto }, new { Label = "Mojang 官方", Source = DownloadSource.Official }, new { Label = "BMCLAPI 镜像优先", Source = DownloadSource.Mirror } };
-        RootBox.Text = state.GameDirectory; JavaBox.Text = state.JavaPath;
+        JavaBox.Text = state.JavaPath;
         GlobalMemoryEditor.Load(state.AutoMemory, state.MemoryMb);
         CleanMemoryBeforeLaunchBox.IsChecked = state.CleanMemoryBeforeLaunch;
         globalJvm.Load(state.Jvm); JvmHost.Content = globalJvm;
@@ -71,7 +76,7 @@ public partial class MainWindow : Window
         ready = true; NavLibrary.IsChecked = true;
         Loaded += (_, _) =>
         {
-            try { ReloadLibrary(); ReloadAccounts(); Log("岛屿启动器 0.10.24 已就绪。"); if (store.LoadWarning is not null) Log(store.LoadWarning); }
+            try { ReloadLibrary(); ReloadAccounts(); Log("岛屿启动器 0.20.19 已就绪。"); if (store.LoadWarning is not null) Log(store.LoadWarning); }
             catch (Exception ex) { Report(ex); }
             _ = RefreshJavaAsync(false);
         };
@@ -82,10 +87,11 @@ public partial class MainWindow : Window
         var page = button.Tag as string;
         LibraryPage.Visibility = page == "Library" ? Visibility.Visible : Visibility.Collapsed;
         AccountsPage.Visibility = page == "Accounts" ? Visibility.Visible : Visibility.Collapsed;
+        MultiplayerPage.Visibility = page == "Multiplayer" ? Visibility.Visible : Visibility.Collapsed;
         LogsPage.Visibility = page == "Logs" ? Visibility.Visible : Visibility.Collapsed;
         SettingsPage.Visibility = page == "Settings" ? Visibility.Visible : Visibility.Collapsed;
         DownloadCenterView.Visibility = page == "Downloads" ? Visibility.Visible : Visibility.Collapsed;
-        if (page == "Downloads") DownloadCenterView.Activate();
+        if (page == "Downloads" && !DownloadCenterView.IsPreparingArchive) DownloadCenterView.Activate();
         AppearancePage.Visibility = Visibility.Collapsed;
     }
     private void ReloadLibrary(bool preserveSelection = true)
@@ -178,7 +184,7 @@ public partial class MainWindow : Window
     {
         var file = new OpenFileDialog { Title = "导入整合包", Filter = "整合包|*.mrpack;*.zip" };
         if (file.ShowDialog(this) != true) return;
-        NavDownloads.IsChecked = true; await DownloadCenterView.ImportAsync(file.FileName);
+        await ImportLocalArchiveAsync(file.FileName);
     }
     private void EditInstance(object sender, RoutedEventArgs e)
     {
@@ -203,14 +209,12 @@ public partial class MainWindow : Window
         if (Selected is not { } selected || game is not null || operation is not null) return;
         await LaunchInstanceAsync(selected);
     }
-    private async Task LaunchInstanceAsync(InstanceCard selected, string? world = null)
+    private async Task LaunchInstanceAsync(InstanceCard selected, string? world = null, bool activateFolder = false)
     {
         if (DownloadCenterView.Queue.IsBusy) { Notice("正在安装实例，请等待下载任务结束或暂停后再启动游戏。"); return; }
         var account = state.Accounts.FirstOrDefault(a => a.Id == state.SelectedAccountId);
         if (account is null) { NavAccounts.IsChecked = true; StatusLabel.Text = "●  请先添加或选择玩家账号"; return; }
         var gameRoot = selected.GameDirectory;
-        var launchSettings = state.DownloadSettings(gameRoot, selected.Id);
-        var runtime = state.RuntimeFor(gameRoot, selected.Id);
         await RunOperationAsync(async token =>
         {
             var preparation = Stopwatch.StartNew();
@@ -224,6 +228,22 @@ public partial class MainWindow : Window
             }
             try
             {
+            if (state.CleanMemoryBeforeLaunch)
+            {
+                await CleanMemoryAsync(token, beforeLaunch: true);
+                await outputLog.WriteLineAsync(MemoryCleanupStatus.Text);
+                await Stage("内存清理已结束");
+            }
+            else await Stage("启动前内存清理未启用，可在设置中点击开启");
+            token.ThrowIfCancellationRequested();
+            if (activateFolder)
+            {
+                var folder = state.GameFolders.First(item => GameFolder.SamePath(item.Directory, gameRoot));
+                ActivateGameFolder(folder.Id);
+                InstanceList.SelectedItem = InstanceList.Items.Cast<InstanceCard>().FirstOrDefault(card => card.Key == selected.Key);
+            }
+            var launchSettings = state.DownloadSettings(gameRoot, selected.Id);
+            var runtime = state.RuntimeFor(gameRoot, selected.Id);
             var resolved = await Task.Run(() => VersionProfile.Read(gameRoot, selected.Id, selected.Isolation), token);
             await Stage("版本配置已读取");
             LaunchIdentity identity;
@@ -271,13 +291,6 @@ public partial class MainWindow : Window
                 await PreLaunchCommands.RunAsync(runtime.Jvm.PreLaunchCommand, selected.RuntimeDirectory, token, line => Log("[启动前命令] " + line));
                 Log("启动前命令执行完成。");
             }
-            if (state.CleanMemoryBeforeLaunch)
-            {
-                await CleanMemoryAsync(token, beforeLaunch: true);
-                await outputLog.WriteLineAsync(MemoryCleanupStatus.Text);
-                await Stage("内存清理已结束");
-            }
-            else await Stage("启动前内存清理未启用，可在设置中点击开启");
             var memory = runtime.AutoMemory ? MemoryAllocator.Recommend(MemoryAllocator.ReadSystem(), MemoryAllocator.CountMods(selected.RuntimeDirectory), java.Is64Bit) : runtime.MemoryMb;
             Log($"内存：{memory} MB · " + (runtime.AutoMemory ? "自动分配" : "手动设置"));
             token.ThrowIfCancellationRequested(); OperationLabel.Text = "正在启动 Minecraft…";
@@ -326,7 +339,7 @@ public partial class MainWindow : Window
                 await outputLog.WriteLineAsync(message); await outputLog.FlushAsync(); throw;
             }
             finally { sensitiveToken = ""; }
-        }, "正在准备启动…");
+        }, state.CleanMemoryBeforeLaunch ? "正在清理内存…" : "正在准备启动…");
     }
     private static long? AvailableMemory()
     {
@@ -358,20 +371,22 @@ public partial class MainWindow : Window
         OperationLabel.Text = progress.Stage + "  ·  " + progress.Detail;
         OperationProgress.IsIndeterminate = progress.Total == 0; OperationProgress.Value = progress.Percent;
     });
-    private async Task RunOperationAsync(Func<CancellationToken, Task> action, string label)
+    internal async Task RunOperationAsync(Func<CancellationToken, Task> action, string label)
     {
         if (operation is not null) { Notice("已有任务正在运行。"); return; }
-        operation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        using var current = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        operation = current;
         OperationPanel.Visibility = Visibility.Visible; OperationLabel.Text = label; OperationProgress.IsIndeterminate = true;
         CancelButton.Content = "取消"; CancelButton.IsEnabled = true; UpdateSelected();
-        try { runningOperation = action(operation.Token); await runningOperation; }
+        async Task ExecuteAsync() { await Task.Yield(); current.Token.ThrowIfCancellationRequested(); await action(current.Token); }
+        try { runningOperation = ExecuteAsync(); await runningOperation; }
         catch (OperationCanceledException) { Log("任务已取消，已下载的缓存可在下次安装时复用。"); StatusLabel.Text = "●  已取消"; }
         catch (Exception ex) { Report(ex); }
         finally
         {
-            operation.Dispose(); operation = null; runningOperation = null;
+            operation = null; runningOperation = null;
             OperationPanel.Visibility = Visibility.Collapsed; UpdateSelected();
-            if (closeAfterOperation) Close();
+            if (closeAfterOperation) _ = Dispatcher.BeginInvoke(new Action(Close));
         }
     }
     private void CancelOperation(object sender, RoutedEventArgs e)
@@ -404,8 +419,9 @@ public partial class MainWindow : Window
     private void RefreshWindowOutline()
     {
         if (WindowSurface is null) return;
-        var radius = WindowState == WindowState.Maximized ? 0 : 14;
+        var radius = WindowState == WindowState.Maximized ? 0 : 8;
         WindowSurface.CornerRadius = new CornerRadius(radius);
+        if (System.Windows.Shell.WindowChrome.GetWindowChrome(this) is { } chrome) chrome.CornerRadius = new CornerRadius(radius);
         var clip = new System.Windows.Media.RectangleGeometry(new Rect(WindowSurface.RenderSize), radius, radius);
         clip.Freeze(); WindowSurface.Clip = clip;
     }
@@ -419,9 +435,18 @@ public partial class MainWindow : Window
         {
             LibraryPage.RowDefinitions[0].Height = new GridLength(e.NewSize.Height < 750 ? 160 : 180);
             AppearancePreviewHost.Height = e.NewSize.Height < 750 ? 226 : 270;
-            SidebarDoll.Height = e.NewSize.Height < 750 ? 180 : 220;
+            var compact=e.NewSize.Height<830;
+            SidebarLayout.RowDefinitions[0].Height=new GridLength(compact ? 64 : 94);
+            SidebarBrand.Margin=new Thickness(28,compact ? 10 : 22,22,0);
+            foreach(var nav in new[]{NavLibrary,NavAccounts,NavDownloads,NavMultiplayer,NavLogs,NavSettings})
+            {
+                nav.Padding=new Thickness(17,compact ? 7 : 12,17,compact ? 7 : 12);
+                nav.Margin=new Thickness(12,compact ? 2 : 3,12,compact ? 2 : 3);
+            }
+            SidebarDoll.Height = compact ? 180 : 220;
         }
     }
+    private bool multiplayerStopped, stoppingMultiplayer;
     private async void OnClosing(object? sender, CancelEventArgs e)
     {
         if (!downloadsStopped && DownloadCenterView.Queue.HasUnfinishedTasks)
@@ -432,7 +457,7 @@ public partial class MainWindow : Window
             closeAfterOperation = true; stoppingDownloads = true; operation?.Cancel();
             try { await DownloadCenterView.ShutdownAsync(); }
             finally { downloadsStopped = true; stoppingDownloads = false; }
-            if (operation is null) Close();
+            if (operation is null) _ = Dispatcher.BeginInvoke(new Action(Close));
             return;
         }
         if (operation is not null)
@@ -441,6 +466,16 @@ public partial class MainWindow : Window
             if (closeAfterOperation || MessageWindow.Confirm(this, "关闭启动器", game is null ? "取消当前任务并关闭启动器？" : "关闭将结束正在运行的游戏，未保存进度可能丢失。确定关闭？", "关闭启动器"))
             { closeAfterOperation = true; operation.Cancel(); }
             return;
+        }
+        if (!multiplayerStopped && MultiplayerPage.NeedsShutdown)
+        {
+            e.Cancel=true;if(stoppingMultiplayer)return;
+            if(MultiplayerPage.HasRoom && !closeAfterOperation && !MessageWindow.Confirm(this,"退出好友联机","关闭启动器会退出当前房间。如果你是房主，好友会断开连接。确定关闭？","退出并关闭"))return;
+            stoppingMultiplayer=true;
+            try{await MultiplayerPage.ShutdownAsync();}
+            catch(Exception ex){Log("联机组件退出提示："+ex.Message);}
+            finally{multiplayerStopped=true;stoppingMultiplayer=false;}
+            _=Dispatcher.BeginInvoke(new Action(Close));return;
         }
         lifetime.Cancel();
         if (!downloadsStopped) { downloadsStopped = true; await DownloadCenterView.ShutdownAsync(); }

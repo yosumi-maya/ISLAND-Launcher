@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -69,7 +69,7 @@ public sealed class ColorPalette : StackPanel
             else return;
             e.Handled = true;
         };
-        spectrum.GotKeyboardFocus += (_, _) => spectrumFocus.BorderThickness = new Thickness(2);
+        spectrum.GotKeyboardFocus += (_, _) => spectrumFocus.BorderThickness = new Thickness(0);
         spectrum.LostKeyboardFocus += (_, _) => spectrumFocus.BorderThickness = new Thickness(0);
         var sliders = new StackPanel { Margin = new Thickness(14, 0, 0, 0) }; Grid.SetColumn(sliders, 1); layout.Children.Add(sliders);
         AddSlider(sliders, hueLabel, hue, HueBrush()); AddSlider(sliders, saturationLabel, saturation); AddSlider(sliders, brightnessLabel, brightness);
@@ -131,8 +131,8 @@ public sealed class ColorPalette : StackPanel
         foreach (var preset in presets)
         {
             var selected = custom && preset.Tag as string == SelectedColor;
-            preset.BorderThickness = new Thickness(selected ? 2 : 1);
-            preset.SetResourceReference(Control.BorderBrushProperty, selected ? "Accent" : "Line");
+            preset.BorderThickness = new Thickness(1);
+            preset.SetResourceReference(Control.BorderBrushProperty, "Line");
             preset.SetResourceReference(Control.BackgroundProperty, selected ? "AccentSoft" : "Surface");
             AutomationProperties.SetItemStatus(preset, selected ? "已选择" : "未选择");
         }

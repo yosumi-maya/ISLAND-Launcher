@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -73,10 +73,45 @@ public sealed class SkinPreview3D : Grid
     }
     public void SetSkin(byte[]? png, string model)
     {
+        if (png is null) model = "classic";
         if (ReferenceEquals(skin, png) && variant == model) return;
         skin = png; variant = model;
         Rig = new SkinRig(SkinImages.TextureOrDefault(png), model) { OuterVisible = showOuter };
-        scene.Children.Clear(); scene.Children.Add(Rig.Model); RenderFrame(time.Elapsed.TotalSeconds);
+        scene.Children.Remove(Rig.Model); scene.Children.Clear(); scene.Children.Add(Rig.Model); if (cape.Children.Count > 0) scene.Children.Add(cape); RenderFrame(time.Elapsed.TotalSeconds);
+    }
+    private readonly Model3DGroup cape = new();
+    public void SetCape(byte[]? png)
+    {
+        scene.Children.Remove(cape); cape.Children.Clear();
+        if (png is null) return;
+        try
+        {
+            var texture = SkinImages.Decode(png);
+            void Face(Int32Rect rect, Point3D a, Point3D b, Point3D c, Point3D d)
+            {
+                // WPF's 3D sampler filters even brushes marked NearestNeighbor.
+                // Replicate texels first, as SkinRig does, so filtering stays at pixel edges.
+                const int scale = 16;
+                var crop = new System.Windows.Media.Imaging.CroppedBitmap(texture, rect);
+                var rgba = new System.Windows.Media.Imaging.FormatConvertedBitmap(crop, PixelFormats.Bgra32, null, 0);
+                var source = new byte[rect.Width * rect.Height * 4]; rgba.CopyPixels(source, rect.Width * 4, 0);
+                var width = rect.Width * scale; var height = rect.Height * scale;
+                var expanded = new byte[width * height * 4];
+                for (var y = 0; y < height; y++) for (var x = 0; x < width; x++)
+                    Buffer.BlockCopy(source, ((y / scale) * rect.Width + x / scale) * 4, expanded, (y * width + x) * 4, 4);
+                var image = System.Windows.Media.Imaging.BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, expanded, width * 4); image.Freeze();
+                var brush = new ImageBrush(image); brush.Freeze();
+                var material = new DiffuseMaterial(brush);
+                var mesh = new MeshGeometry3D { Positions = new Point3DCollection { a,b,c,d }, TriangleIndices = new Int32Collection { 0,1,2,0,2,3 }, TextureCoordinates = new PointCollection { new(.5 / width,.5 / height),new(.5 / width,1 - .5 / height),new(1 - .5 / width,1 - .5 / height),new(1 - .5 / width,.5 / height) } };
+                cape.Children.Add(new GeometryModel3D(mesh, material));
+            }
+            Face(new(1,1,10,16), new(5,24,-2.6),new(5,8,-5.6),new(-5,8,-5.6),new(-5,24,-2.6));
+            Face(new(12,1,10,16),new(-5,24,-2.1),new(-5,8,-5.1),new(5,8,-5.1),new(5,24,-2.1));
+            Face(new(0,1,1,16),new(-5,24,-2.6),new(-5,8,-5.6),new(-5,8,-5.1),new(-5,24,-2.1));
+            Face(new(11,1,1,16),new(5,24,-2.1),new(5,8,-5.1),new(5,8,-5.6),new(5,24,-2.6));
+            scene.Children.Add(cape);
+        }
+        catch (Exception ex) when (ex is ArgumentException or System.IO.IOException or NotSupportedException or InvalidOperationException) { }
     }
     public void SetPose(SkinPose pose) { Pose = pose; time.Reset(); if (renderingSubscribed) time.Start(); RenderFrame(0); UpdatePoseMenu(); }
     public void ResetView() { rotation.Angle = -20; zoom = 1; targetYaw = targetPitch = yaw = pitch = 0; FitCamera(); RenderFrame(time.Elapsed.TotalSeconds); }

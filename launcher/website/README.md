@@ -1,6 +1,8 @@
 # ISLAND 官网
 
-2026-10-27 重新设计的中英文静态官网。白灰底色、岛屿青、原生 SVG 岛屿图案；包含功能、主题预览、材质交互示意、下载、运行要求、服务状态、FAQ 与隐私说明。
+2026-11-01 按用户选择的 Product Design 第 2 张方案改版。原生 HTML / CSS / JS，无前端运行依赖。
+
+首屏使用浅灰雾气、体素岛屿与大标题，突出 Windows 下载入口。下方为左右分栏的真实截图展示，支持浅色 / 玻璃切换与原图放大；功能、外观、下载要求、服务状态、FAQ、隐私页及中英文切换继续可用。
 
 ## 本地预览
 
@@ -9,23 +11,23 @@ node launcher/website/build.mjs
 node launcher/website/tools/serve.mjs
 ```
 
-在浏览器访问 http://127.0.0.1:4183/。也可以直接打开 index.html。无 npm 依赖。
+访问 http://127.0.0.1:4183/ 。构建输出为 `dist/`，未执行公开部署。
 
 ## 项目与下载
 
 公开仓库：https://github.com/yosumi-maya/ISLAND-Launcher
 
-配置集中于 site.config.js。发布入口固定指向 0.10.22 预览版标签，不依赖只包含稳定版本的 releases/latest。
+下载配置位于 `site.config.js`，继续使用原有 v0.10.22 发布入口，本次只改版网页，不推断新版本状态。
 
-## 接入项目所有者提供的截图
+## 资源与样式
 
-截图由项目所有者提供，本轮不继续生成或截取。三个截图位置默认空白并展示明确占位；不使用模拟图冒充实际界面。把提供的图片保存至 assets/，将 screenshots 中 forest、rose、glass 配置为例如 ./assets/launcher-light.png，再运行构建。图片路径仅接受 assets 下的本地 PNG、JPEG、WebP；图片加载失败时保留占位。
+- `styles.css`：原有通用样式与隐私页样式。
+- `redesign.css`：本次官网布局、字体、配色和响应式样式。
+- `assets/island-hero.webp`：本次生成的岛屿首屏插画，约 182 KiB；PNG 原稿保留于同目录，不进入构建产物。
+- `assets/island-shore.webp`：展示区海岸背景，约 50 KiB。
+- `assets/launcher-light.png`（1227 × 817）、`assets/launcher-glass.png`（1231 × 811）：所有者提供的真实截图，文件未修改。玻璃主题原图也用于外观展示。
 
-用户未提供全部主题截图时，只填写已有的项目即可。构建只带入 favicon 和显式配置的截图，不打包历史自动截图。
-
-## 发布
-
-构建输出位于 dist/，可部署至支持静态文件的托管服务。当前截图尚待补充，官网先提供本地预览；API 申请需要可公开访问的项目介绍与隐私页面，上线后把实际站点地址填入 siteUrl。没有虚构已上线地址。
+网页不加载第三方字体、统计或脚本。下载跳转 GitHub，服务状态与隐私说明沿用原有内容。
 
 ## 检查
 
@@ -33,4 +35,4 @@ node launcher/website/tools/serve.mjs
 node launcher/website/tests/verify.mjs
 ```
 
-设计依据见 DESIGN.md。网页无第三方字体、统计、网站账号或表单；外部下载通过 GitHub，隐私说明列出启动器与外部服务的数据处理方式。
+本次构建成功，29 项现有静态检查通过。桌面与手机浏览器验收通过，详细证据见 `design-qa.md`。设计与素材说明见 `DESIGN.md`。

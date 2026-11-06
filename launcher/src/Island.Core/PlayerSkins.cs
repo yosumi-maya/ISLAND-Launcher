@@ -1,4 +1,4 @@
-using System.Buffers.Binary;
+﻿using System.Buffers.Binary;
 using System.Text.Json.Nodes;
 using BlockDock.Core;
 
@@ -20,6 +20,15 @@ public static class PlayerSkins
     }
     public static void ReadProfile(PlayerAccount account, JsonObject profile)
     {
+        if (profile["capes"] is JsonArray capes)
+        {
+            var previous = account.ActiveCapeId;
+            account.Capes = capes.OfType<JsonObject>().Where(c => c.Str("id").Length > 0)
+                .Select(c => new PlayerCape(c.Str("id"), c.Str("alias").Length > 0 ? c.Str("alias") : "披风", c.Str("url"))).ToList();
+            account.ActiveCapeId = capes.OfType<JsonObject>().FirstOrDefault(c => c.Str("state").Equals("ACTIVE", StringComparison.OrdinalIgnoreCase))?.Str("id") ?? "";
+            account.CapesLoaded = true;
+            if (previous != account.ActiveCapeId) account.CapePng = null;
+        }
         var skin = profile.Array("skins").OfType<JsonObject>().FirstOrDefault(s => s.Str("state").Equals("ACTIVE", StringComparison.OrdinalIgnoreCase));
         account.SkinUrl = skin?.Str("url") ?? "";
         account.SkinVariant = skin?.Str("variant").Equals("SLIM", StringComparison.OrdinalIgnoreCase) == true ? "slim" : "classic";

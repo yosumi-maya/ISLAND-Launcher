@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Threading;
@@ -18,6 +18,10 @@ public partial class MainWindow
         var menu = SidebarDoll.ContextMenu!;
         menu.Items.Add(new Separator()); menu.Items.Add(dollCleanMemoryItem);
         dollCleanMemoryItem.Click += CleanMemoryNow;
+        var capeItem = new MenuItem { Header = "切换正版披风…" };
+        capeItem.Click += (_, _) => { var account = state.Accounts.FirstOrDefault(a => a.Id == state.SelectedAccountId); if (account is not null) OpenCapeWindow(account); };
+        menu.Items.Add(capeItem);
+        menu.Opened += (_, _) => capeItem.IsEnabled = operation is null && state.Accounts.Any(a => a.Id == state.SelectedAccountId && a.Microsoft);
         dollMemoryFeedbackTimer.Tick += (_, _) => { dollMemoryFeedbackTimer.Stop(); DollMemoryFeedback.IsOpen = false; };
         Closed += (_, _) => { dollMemoryFeedbackTimer.Stop(); DollMemoryFeedback.IsOpen = false; };
     }

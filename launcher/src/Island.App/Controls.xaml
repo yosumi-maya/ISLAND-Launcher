@@ -80,7 +80,7 @@
    <ControlTemplate.Triggers>
     <Trigger Property="IsEditable" Value="True"><Setter TargetName="Selection" Property="Visibility" Value="Collapsed"/><Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible"/><Setter TargetName="DropToggle" Property="Grid.Column" Value="1"/><Setter TargetName="DropToggle" Property="Grid.ColumnSpan" Value="1"/></Trigger>
     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ComboBody" Property="BorderBrush" Value="{DynamicResource Focus}"/></Trigger>
-    <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="ComboBody" Property="BorderBrush" Value="{DynamicResource Focus}"/></Trigger>
+
     <Trigger Property="IsDropDownOpen" Value="True"><Setter TargetName="ComboBody" Property="BorderBrush" Value="{DynamicResource Focus}"/></Trigger>
     <Trigger Property="HasItems" Value="False"><Setter TargetName="DropBody" Property="MinHeight" Value="32"/></Trigger>
     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.42"/></Trigger>
@@ -100,7 +100,7 @@
     <Trigger Property="IsChecked" Value="True"><Setter TargetName="CheckBody" Property="Background" Value="{DynamicResource Accent}"/><Setter TargetName="CheckBody" Property="BorderBrush" Value="{DynamicResource Accent}"/><Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/></Trigger>
     <Trigger Property="IsChecked" Value="{x:Null}"><Setter TargetName="CheckBody" Property="Background" Value="{DynamicResource Accent}"/><Setter TargetName="Mixed" Property="Visibility" Value="Visible"/></Trigger>
     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="CheckBody" Property="BorderBrush" Value="{DynamicResource Focus}"/></Trigger>
-    <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="CheckBody" Property="BorderBrush" Value="{DynamicResource Focus}"/><Setter TargetName="CheckBody" Property="BorderThickness" Value="2"/></Trigger>
+
     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.42"/></Trigger>
    </ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
@@ -124,7 +124,7 @@
    <ControlTemplate.Triggers>
     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="RowBody" Property="Background" Value="{DynamicResource AccentHover}"/></Trigger>
     <Trigger Property="IsSelected" Value="True"><Setter TargetName="RowBody" Property="Background" Value="{DynamicResource AccentSoft}"/><Setter Property="Foreground" Value="{DynamicResource AccentInk}"/></Trigger>
-    <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="RowBody" Property="BorderBrush" Value="{DynamicResource Focus}"/></Trigger>
+
    </ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
  </Style>

@@ -67,7 +67,7 @@ internal static class ContentDownloadTests
         var releases = await service.GetVersionsAsync(settings, Project("mod", ContentKind.Mod), modFilter, default);
         check(releases.Single().Id == main.Id, "Content versions preserve the instance Minecraft and loader filters");
         var plan = await service.PrepareAsync(settings, Project("mod", ContentKind.Mod), main, modFilter, target, default);
-        check(plan.Files.Count == 2 && plan.Files[0].ProjectId == "fabric-api" && !requests.Any(url => url.Contains("optional")), "Required dependencies resolve before the main mod and optional dependencies remain untouched");
+        check(plan.Files.Count == 2 && plan.Files[0].ProjectId == "fabric-api" && plan.Files[0].IsDependency && !plan.Files[1].IsDependency && !requests.Any(url => url.Contains("optional")), "Required dependencies are labeled separately from the main mod and optional dependencies remain untouched");
         await service.InstallAsync(settings, plan, new Progress(_ => { }), default);
         check(plan.TargetFiles.All(File.Exists) && plan.TargetFiles.All(path => path.StartsWith(Path.Combine(target.RuntimeDirectory, "mods"))) && File.Exists(Path.Combine(target.RuntimeDirectory, ".island", "content.json")), "Content installation verifies and commits required JARs into the isolated instance");
         var before = downloads; await service.InstallAsync(settings, plan, new Progress(_ => { }), default);
@@ -124,6 +124,29 @@ internal static class ContentDownloadTests
         var corruptPlan = cancelPlan with { Files = [cancelPlan.Files[0] with { Sha512 = "../outside" }] };
         await Reject(() => service.InstallAsync(settings, corruptPlan, new Progress(_ => { }), default), "Installation independently validates resource hashes before constructing cache paths");
         await Reject(() => service.InstallAsync(settings, resourcePlan with { Target = shared with { RuntimeDirectory = target.RuntimeDirectory } }, new Progress(_ => { }), default), "A stale or substituted runtime directory is rejected before downloading");
+        var manualDependency = Add("manual-dependency", "manual-dependency-v1", ContentKind.Mod);
+        var manualMain = Add("manual-main", "manual-main-v1", ContentKind.Mod, dependencies: new JsonArray(Dependency("manual-dependency")));
+        var manualPlan = await service.PrepareAsync(settings, Project("manual-main", ContentKind.Mod), manualMain, modFilter, target, default);
+        var chosen = manualPlan with { SkippedDependencies = ["manual-dependency"] }; var beforeManual = downloads;
+        await service.InstallAsync(settings, chosen, new Progress(_ => { }), default);
+        check(downloads == beforeManual + 1 && chosen.TargetFiles.Count == 1 && !File.Exists(ContentDownloads.Destination(target, manualPlan.Files.Single(file => file.IsDependency))), "Manually unchecked prerequisites are excluded from actual downloads and target files");
+        var recorded = System.Text.Json.JsonSerializer.Deserialize<List<ContentFile>>(File.ReadAllText(Path.Combine(target.RuntimeDirectory, ".island", "content.json")))!;
+        check(!recorded.Any(file => file.ProjectId == "manual-dependency") && recorded.Any(file => file.ProjectId == "manual-main"), "Skipped dependencies are not falsely recorded as newly installed");
+        await Reject(() => service.InstallAsync(settings, manualPlan with { SkippedDependencies = ["manual-main"] }, new Progress(_ => { }), default), "A selection cannot skip the main mod");
+        var renamedTarget = Target("Renamed dependencies", "Fabric"); var renamedPlan = plan with { Target = renamedTarget };
+        Directory.CreateDirectory(Path.Combine(renamedTarget.RuntimeDirectory, "mods"));
+        var renamedPath = Path.Combine(renamedTarget.RuntimeDirectory, "mods", "[前置]自定义名字.jar"); await File.WriteAllBytesAsync(renamedPath, payloads[dependency.Id]);
+        var beforeRenamed = downloads; await service.InstallAsync(settings, renamedPlan, new Progress(_ => { }), default);
+        check(downloads == beforeRenamed + 1 && File.Exists(renamedPath) && !File.Exists(ContentDownloads.Destination(renamedTarget, renamedPlan.Files[0])), "The installer rechecks renamed prerequisites added after confirmation and avoids duplicate downloads and copies");
+        recorded = System.Text.Json.JsonSerializer.Deserialize<List<ContentFile>>(File.ReadAllText(Path.Combine(renamedTarget.RuntimeDirectory, ".island", "content.json")))!;
+        check(recorded.Single(file => file.ProjectId == "fabric-api").FileName == "[前置]自定义名字.jar", "Reused renamed dependencies retain their actual filenames in installation records");
+        var movedDependency = Path.Combine(renamedTarget.RuntimeDirectory, "mods", "[前置]再改一次名字.jar"); File.Move(renamedPath, movedDependency);
+        Add("fabric-api", "api-v2", ContentKind.Mod);
+        var pinnedMain = Add("pinned-main", "pinned-main-v1", ContentKind.Mod, dependencies: new JsonArray(Dependency("fabric-api", "api-v2")));
+        var pinnedPlan = await service.PrepareAsync(settings, Project("pinned-main", ContentKind.Mod), pinnedMain, modFilter, renamedTarget, default);
+        await Reject(() => service.InstallAsync(settings, pinnedPlan, new Progress(_ => { }), default), "Renaming an older registered prerequisite cannot bypass duplicate-project protection");
+        await service.InstallAsync(settings, pinnedPlan with { SkippedDependencies = ["fabric-api"] }, new Progress(_ => { }), default);
+        check(File.Exists(movedDependency) && !File.Exists(ContentDownloads.Destination(renamedTarget, pinnedPlan.Files.Single(file => file.IsDependency))), "Users can explicitly keep an existing different prerequisite version without replacing or duplicating its JAR");
         check(!invalidProviderRequest, "Content downloads send no CurseForge requests or credentials");
     }
 }

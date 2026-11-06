@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Controls;
@@ -51,6 +51,7 @@ internal static class JavaCacheUiTests
             var instanceState = store.Load(); var card = new InstanceCard(Find<ListBox>(first, "InstanceList").Items.Cast<InstanceCard>().Single().Instance, instanceState.For("Sample"));
             var dialog = new InstanceWindow(first, card, instanceState, () => store.Save(instanceState)) { Left = -16000, Top = 0, WindowStartupLocation = WindowStartupLocation.Manual, ShowInTaskbar = false };
             dialog.Show(); dialog.UpdateLayout();
+            Children<InstanceSettingRow>(dialog).Single(row => row.Name == "InstanceJavaSetting").Expanded = true; dialog.UpdateLayout();
             check(Children<ComboBox>(dialog).Single(box => box.Name == "InstanceJavaBox").Items.Count == 3 && scans == 1 && !card.Preferences.HasIndependentSettings,
                 "Instance settings reuse the same saved Java list while retaining global inheritance"); dialog.Close();
         }
@@ -77,7 +78,8 @@ internal static class JavaCacheUiTests
             var instanceState = store.Load(); var prefs = instanceState.For("Sample"); prefs.JavaPath = oldPath; prefs.MemoryMb = 1024; store.Save(instanceState);
             var card = new InstanceCard(Find<ListBox>(recovered, "InstanceList").Items.Cast<InstanceCard>().Single().Instance, prefs);
             var dialog = new InstanceWindow(recovered, card, instanceState, () => store.Save(instanceState)) { Left = -16000, Top = 0, WindowStartupLocation = WindowStartupLocation.Manual, ShowInTaskbar = false };
-            dialog.Show(); dialog.UpdateLayout(); await Wait(() => Children<TextBlock>(dialog).Single(label => label.Name == "InstanceJavaStatus").Text.Contains("此实例已改为自动选择"));
+            dialog.Show(); dialog.UpdateLayout();
+            Children<InstanceSettingRow>(dialog).Single(row => row.Name == "InstanceJavaSetting").Expanded = true; dialog.UpdateLayout(); await Wait(() => Children<TextBlock>(dialog).Single(label => label.Name == "InstanceJavaStatus").Text.Contains("此实例已改为自动选择"));
             check(store.Load().For("Sample") is { JavaPath: "", MemoryMb: 1024, HasIndependentSettings: true } && store.Load().JavaPath == "",
                 "A missing independent Java recovers within its own instance without losing the independent memory setting"); dialog.Close();
             var previous = scans;
