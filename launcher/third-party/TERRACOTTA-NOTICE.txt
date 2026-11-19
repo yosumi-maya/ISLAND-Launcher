@@ -1,0 +1,10 @@
+Terracotta | 陶瓦联机 — © burningtnt and contributors
+ISLAND 使用未经修改的官方 Terracotta 0.4.2 Windows x86_64 程序，通过独立进程的本地 HTTP API 集成；不静态或动态链接陶瓦。
+项目采用 AGPL-3.0-or-later，并附有允许未经修改二进制分发及 IPC 接入的例外。官方例外要求 IPC 接入者在界面明显处标识陶瓦版权信息。
+官方项目、源代码与接入例外：https://github.com/burningtnt/Terracotta/tree/v0.4.2
+对应源代码下载：https://github.com/burningtnt/Terracotta/archive/refs/tags/v0.4.2.tar.gz
+官方 HTTP API：https://burningtnt.github.io/Terracotta/http-api/
+官方发布包：https://github.com/burningtnt/Terracotta/releases/tag/v0.4.2
+原始许可见 TERRACOTTA-LICENSE.txt。上述独立组件不包含在 ISLAND 原创代码的 MIT 授权中。
+组件内含 EasyTier 和上游运行时依赖，版权及许可属于各自作者。使用官方原始包，不修改其中的 exe / DLL。
+官方包 SHA256：07ebe139e3ca5f74576e58b1a96efe59abdfbe148d3f1a49bfdca8b6f70745f0

@@ -1,0 +1,6 @@
+Minecraft / loader instance icon images sourced unchanged from HMCL-dev/HMCL, commit 8047775bf83695e9403ea77077a23620bb2bb8cd.
+Source: https://github.com/HMCL-dev/HMCL/tree/8047775bf83695e9403ea77077a23620bb2bb8cd/HMCL/src/main/resources/assets/img
+Upstream license: GNU GPL v3 with upstream additional terms, reproduced in HMCL-ICON-LICENSE.txt.
+Copyright belongs to the respective Minecraft / loader / image authors. Minecraft is a trademark of Mojang Studios.
+These third-party images are excluded from ISLAND original code's MIT license. No HMCL program code is included.
+Original files and exact source URLs / hashes: INSTANCE-ICONS-SOURCES.json.

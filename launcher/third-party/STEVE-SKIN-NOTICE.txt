@@ -1,0 +1,8 @@
+Default Steve skin texture
+Source: https://assets.mojang.com/SkinTemplates/steve.png
+Downloaded: 2026-11-03
+SHA256: 4c7b0468044bfecacc43d00a3a69335a834b73937688292c20d3988cae58248d
+Original Mojang skin template, unchanged. Copyright belongs to Mojang Studios / Microsoft.
+Used as the default Minecraft player skin and avatar in ISLAND Launcher; embedded for offline availability.
+This third-party image is excluded from the MIT license covering ISLAND original code.
+Minecraft is a trademark of Mojang Studios. ISLAND is not affiliated with or endorsed by Mojang Studios or Microsoft.

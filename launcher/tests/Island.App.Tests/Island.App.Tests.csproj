@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+ <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0-windows</TargetFramework><UseWPF>true</UseWPF></PropertyGroup>
+ <ItemGroup><ProjectReference Include="../../src/Island.App/Island.App.csproj"/></ItemGroup>
+ <ItemGroup><Compile Include="../Island.Tests/FolderAndWorldTests.cs" Link="FolderAndWorldTests.cs"/></ItemGroup>
+  <ItemGroup><Compile Include="../../../tests/BlockDock.App.Tests/DownloadQueueTests.cs" Link="DownloadQueueTests.cs" /></ItemGroup>
+</Project>

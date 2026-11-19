@@ -1,0 +1,72 @@
+[
+  {
+    "file": "grass.png",
+    "url": "https://raw.githubusercontent.com/HMCL-dev/HMCL/8047775bf83695e9403ea77077a23620bb2bb8cd/HMCL/src/main/resources/assets/img/grass@2x.png",
+    "sha256": "d1d07bc830b98a1000a172bdfab7abc4a14d20828f78768b52fdaccf78853c43"
+  },
+  {
+    "file": "chest.png",
+    "url": "https://raw.githubusercontent.com/HMCL-dev/HMCL/8047775bf83695e9403ea77077a23620bb2bb8cd/HMCL/src/main/resources/assets/img/chest@2x.png",
+    "sha256": "cc2f334fdbbe48b88e1fce67e5d4b580dbe3ca0ab8b0c37ac120b8ffa91bfed2"
+  },
+  {
+    "file": "chicken.png",
+    "url": "https://raw.githubusercontent.com/HMCL-dev/HMCL/8047775bf83695e9403ea77077a23620bb2bb8cd/HMCL/src/main/resources/assets/img/chicken@2x.png",
+    "sha256": "55fb11beb766a35e23129acc5dc794792644a8b302f9176e754c74c17e64fbb3"
+  },
+  {
+    "file": "command.png",
+    "url": "https://raw.githubusercontent.com/HMCL-dev/HMCL/8047775bf83695e9403ea77077a23620bb2bb8cd/HMCL/src/main/resources/assets/img/command@2x.png",
+    "sha256": "55057bca5da2985b06ac1e8f62dc77eef60ed6a97fc728f3101aab56966ec843"
+  },
+  {
+    "file": "april_fools.png",
+    "url": "https://raw.githubusercontent.com/HMCL-dev/HMCL/8047775bf83695e9403ea77077a23620bb2bb8cd/HMCL/src/main/resources/assets/img/april_fools@2x.png",
+    "sha256": "9d4be3db0c6d950e8155cbc2a158812fa73d3d80750da1554d99866c0858460a"
+  },
+  {
+    "file": "optifine.png",
+    "url": "https://raw.githubusercontent.com/HMCL-dev/HMCL/8047775bf83695e9403ea77077a23620bb2bb8cd/HMCL/src/main/resources/assets/img/optifine@2x.png",
+    "sha256": "5420e19d07b4795e1abf90fcff3d510995d3b5d94e59c8d77aeb8e220254fd4c"
+  },
+  {
+    "file": "craft_table.png",
+    "url": "https://raw.githubusercontent.com/HMCL-dev/HMCL/8047775bf83695e9403ea77077a23620bb2bb8cd/HMCL/src/main/resources/assets/img/craft_table@2x.png",
+    "sha256": "24d339401956ae1e1ebc00aa1142f1f1fe4a5a60c2ee093dc9126ab42782e4fb"
+  },
+  {
+    "file": "fabric.png",
+    "url": "https://raw.githubusercontent.com/HMCL-dev/HMCL/8047775bf83695e9403ea77077a23620bb2bb8cd/HMCL/src/main/resources/assets/img/fabric@2x.png",
+    "sha256": "41522b3681ad72fd2b0f60fe342015630abfb135893f13557c5040feb73bd862"
+  },
+  {
+    "file": "forge.png",
+    "url": "https://raw.githubusercontent.com/HMCL-dev/HMCL/8047775bf83695e9403ea77077a23620bb2bb8cd/HMCL/src/main/resources/assets/img/forge@2x.png",
+    "sha256": "cf98c5d6342531b1ef71efed56e8aedf24aa62c46030c2c555fb6e4c96a62e1c"
+  },
+  {
+    "file": "legacyfabric.png",
+    "url": "https://raw.githubusercontent.com/HMCL-dev/HMCL/8047775bf83695e9403ea77077a23620bb2bb8cd/HMCL/src/main/resources/assets/img/legacyfabric@2x.png",
+    "sha256": "6d01883e87bbe727d02e263b1371aae78ed55e707fa7788f75c2b4b745621055"
+  },
+  {
+    "file": "neoforge.png",
+    "url": "https://raw.githubusercontent.com/HMCL-dev/HMCL/8047775bf83695e9403ea77077a23620bb2bb8cd/HMCL/src/main/resources/assets/img/neoforge@2x.png",
+    "sha256": "62517cda8453e91bc1f0aba1d65e0753b63cd5e8c7e533553c7508bb75d76a6e"
+  },
+  {
+    "file": "furnace.png",
+    "url": "https://raw.githubusercontent.com/HMCL-dev/HMCL/8047775bf83695e9403ea77077a23620bb2bb8cd/HMCL/src/main/resources/assets/img/furnace@2x.png",
+    "sha256": "c683951b566ede4e4194606ccab272936491ad2e6e4d0aa50efb15f816dcba84"
+  },
+  {
+    "file": "quilt.png",
+    "url": "https://raw.githubusercontent.com/HMCL-dev/HMCL/8047775bf83695e9403ea77077a23620bb2bb8cd/HMCL/src/main/resources/assets/img/quilt@2x.png",
+    "sha256": "5b946bc1a1609df057148e4c507aafffebed0e51b2197f3d1a1c41a484dc52fa"
+  },
+  {
+    "file": "cleanroom.png",
+    "url": "https://raw.githubusercontent.com/HMCL-dev/HMCL/8047775bf83695e9403ea77077a23620bb2bb8cd/HMCL/src/main/resources/assets/img/cleanroom@2x.png",
+    "sha256": "02cb4b49c67faf505592c33e588852f3ddfb788b61529a19ea3cd6bcf3db9460"
+  }
+]

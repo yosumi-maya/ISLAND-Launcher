@@ -1,0 +1,42 @@
+﻿<UserControl x:Class="Island.App.MultiplayerView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:Island.App">
+ <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <StackPanel Margin="0,4,0,20"><TextBlock Text="好友联机" FontSize="25" FontWeight="SemiBold"/><TextBlock Text="分享房间码，和朋友一起游玩 Minecraft Java。" Style="{DynamicResource Hint}" Margin="0,8,0,0"/></StackPanel>
+  <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel Margin="0,0,8,0">
+   <Grid x:Name="SetupPanel"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/></Grid.ColumnDefinitions>
+    <local:MaterialBorder Style="{DynamicResource Card}" Area="Panels" Margin="0"><StackPanel>
+     <TextBlock Text="创建房间" FontSize="18" FontWeight="SemiBold"/>
+     <TextBlock Text="进入单人存档，打开暂停菜单，选择“对局域网开放”。启动器会自动寻找已开放的游戏。" Style="{DynamicResource Hint}" TextWrapping="Wrap" Margin="0,12,0,18"/>
+     <Button x:Name="HostButton" Content="创建房间" Style="{DynamicResource Primary}" HorizontalAlignment="Left" Click="Host"/>
+    </StackPanel></local:MaterialBorder>
+    <local:MaterialBorder Grid.Column="2" Style="{DynamicResource Card}" Area="Panels" Margin="0"><StackPanel>
+     <TextBlock Text="加入好友" FontSize="18" FontWeight="SemiBold"/>
+     <TextBlock Text="粘贴好友分享的陶瓦房间码。双方需使用兼容的游戏版本和模组。" Style="{DynamicResource Hint}" TextWrapping="Wrap" Margin="0,12,0,12"/>
+     <TextBlock Text="房间码" Margin="0,0,0,6"/><TextBox x:Name="RoomInput" MaxLength="64" ToolTip="U/XXXX-XXXX-XXXX-XXXX" AutomationProperties.Name="陶瓦房间码"/>
+     <Button x:Name="JoinButton" Content="加入房间" HorizontalAlignment="Left" Click="Join" Margin="0,12,0,0"/>
+    </StackPanel></local:MaterialBorder>
+   </Grid>
+   <local:MaterialBorder Style="{DynamicResource Card}" Area="Panels" Margin="0,16,0,0"><StackPanel>
+    <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+     <TextBlock x:Name="StateText" Text="准备好后，创建或加入一个房间" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center"/>
+     <Button x:Name="LeaveButton" Grid.Column="1" Content="退出房间" Click="Leave" Visibility="Collapsed" Margin="12,0,0,0"/>
+    </Grid>
+    <TextBlock x:Name="DetailText" Text="首次使用会下载并校验约 8 MB 的官方联机组件。" Style="{DynamicResource Hint}" TextWrapping="Wrap" Margin="0,10,0,0"/>
+    <ProgressBar x:Name="Progress" IsIndeterminate="True" Height="3" Margin="0,14,0,0" Visibility="Collapsed"/>
+    <Button x:Name="CancelButton" Content="取消" Click="Cancel" Visibility="Collapsed" HorizontalAlignment="Left" Margin="0,12,0,0"/>
+    <Grid x:Name="RoomPanel" Visibility="Collapsed" Margin="0,18,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+     <StackPanel><TextBlock x:Name="RoomCaption" Text="分享房间码" Style="{DynamicResource Hint}"/><TextBox x:Name="RoomValue" IsReadOnly="True" FontSize="18" BorderThickness="0" Padding="0,8,0,4" Background="Transparent" AutomationProperties.Name="当前房间码或游戏地址"/></StackPanel>
+     <Button Grid.Column="1" x:Name="CopyButton" Content="复制" Click="CopyRoom" VerticalAlignment="Center" Margin="12,0,0,0"/>
+    </Grid>
+    <TextBlock x:Name="MembersCaption" Text="房间成员" Margin="0,18,0,10" FontWeight="SemiBold" Visibility="Collapsed"/>
+    <ItemsControl x:Name="Members"><ItemsControl.ItemTemplate><DataTemplate><Grid Margin="0,0,0,10"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{Binding Name}"/><TextBlock Text="{Binding Vendor}" Style="{DynamicResource Hint}" FontSize="10" Margin="0,3,0,0" TextWrapping="Wrap"/></StackPanel><TextBlock Grid.Column="1" Text="{Binding Role}" Foreground="{DynamicResource Muted}" Margin="12,0,0,0"/></Grid></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+    <TextBlock x:Name="Feedback" TextWrapping="Wrap" Margin="0,12,0,0" Foreground="{DynamicResource Muted}"/>
+   </StackPanel></local:MaterialBorder>
+   <TextBlock Text="加入成功后，在游戏的多人游戏列表中进入“陶瓦联机大厅”；也可以使用页面显示的本地地址直接连接。P2P 连接受双方网络影响，房主退出存档后房间会关闭。" Style="{DynamicResource Hint}" TextWrapping="Wrap" Margin="0,16,0,0"/>
+   <WrapPanel Margin="0,10,0,14"><Button Content="导入官方组件包…" x:Name="ImportButton" Click="Import" Style="{DynamicResource Quiet}"/><Button Content="查看联机日志" Click="OpenLogs" Style="{DynamicResource Quiet}" Margin="8,0,0,0"/><Button Content="陶瓦使用文档 ↗" Click="OpenDocs" Style="{DynamicResource Quiet}" Margin="8,0,0,0"/></WrapPanel>
+  </StackPanel></ScrollViewer>
+  <Border Grid.Row="2" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource Line}" Padding="0,12,0,0" Margin="0,6,0,0"><StackPanel>
+   <TextBlock Text="联机由 Terracotta（陶瓦联机）提供 · © burningtnt" FontSize="11" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"/>
+   <WrapPanel Margin="0,3,0,0"><TextBlock Text="AGPL-3.0-or-later（含接入例外）" FontSize="10" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"/><Button Content="项目与许可 ↗" Click="OpenLicense" Style="{DynamicResource Quiet}" FontSize="10" Padding="8,3"/></WrapPanel>
+  </StackPanel></Border>
+ </Grid>
+</UserControl>
