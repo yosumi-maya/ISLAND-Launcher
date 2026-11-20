@@ -46,9 +46,15 @@ public partial class MemoryAllocationEditor : UserControl
     public void SetContext(string? modDirectory)
     {
         directory = modDirectory;
+        if (!IsVisible) return;
+        ReadModCount();
+        UpdateDisplay();
+    }
+
+    private void ReadModCount()
+    {
         try { modCount = directory is null ? 0 : MemoryAllocator.CountMods(directory); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { modCount = 0; }
-        UpdateDisplay();
     }
 
     public void Refresh()
@@ -61,7 +67,7 @@ public partial class MemoryAllocationEditor : UserControl
     private void UpdateTimer()
     {
         if (refreshTimer is null) return;
-        if (IsLoaded && IsVisible) { Refresh(); refreshTimer.Start(); }
+        if (IsLoaded && IsVisible) { ReadModCount(); Refresh(); refreshTimer.Start(); }
         else refreshTimer.Stop();
     }
 

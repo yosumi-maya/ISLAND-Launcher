@@ -16,7 +16,7 @@
     <Grid Margin="0,2"><Grid.ColumnDefinitions><ColumnDefinition Width="30"/><ColumnDefinition/></Grid.ColumnDefinitions>
      <CheckBox IsChecked="{Binding Install, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanToggle}" VerticalAlignment="Top" Margin="0,4,0,0" AutomationProperties.Name="{Binding CheckLabel}" ToolTip="{Binding CheckLabel}"/>
      <StackPanel Grid.Column="1">
-      <DockPanel LastChildFill="True"><Border DockPanel.Dock="Left" Background="{DynamicResource AccentSoft}" CornerRadius="4" Padding="6,2" Margin="0,0,8,0"><TextBlock Text="{Binding Role}" FontSize="11" Foreground="{DynamicResource AccentInk}"/></Border><TextBlock Text="{Binding Title}" FontSize="14" FontWeight="SemiBold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip="{Binding Title}"/></DockPanel>
+      <DockPanel LastChildFill="True"><Border DockPanel.Dock="Left" Background="{DynamicResource SelectionBackground}" CornerRadius="4" Padding="6,2" Margin="0,0,8,0"><TextBlock Text="{Binding Role}" FontSize="11" Foreground="{DynamicResource Muted}"/></Border><TextBlock Text="{Binding Title}" FontSize="14" FontWeight="SemiBold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip="{Binding Title}"/></DockPanel>
       <TextBlock Text="{Binding FileLabel}" FontSize="12" Foreground="{DynamicResource Muted}" Margin="0,6,0,0" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding Destination}"/>
       <TextBlock Text="{Binding Detection}" FontSize="12" Foreground="{DynamicResource Muted}" Margin="0,5,0,0" TextWrapping="Wrap"/>
       <TextBlock Text="{Binding ExistingLabel}" FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,3,0,0" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding ExistingPath}"><TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers><DataTrigger Binding="{Binding ExistingLabel}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
@@ -25,7 +25,7 @@
    </DataTemplate></ListBox.ItemTemplate>
   </ListBox>
   <StackPanel Grid.Row="3" Margin="0,12,0,0">
-   <ProgressBar x:Name="DetectionProgress" IsIndeterminate="True" Height="3" Foreground="{DynamicResource Accent}" Margin="0,0,0,8"/>
+   <ProgressBar x:Name="DetectionProgress" IsIndeterminate="True" Height="3" Foreground="{DynamicResource StatusAccent}" Margin="0,0,0,8"/>
    <TextBlock x:Name="SelectionSummary" FontWeight="SemiBold" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/>
    <TextBlock x:Name="SelectionHint" Text="前置可取消勾选；未勾选的项目不会下载。" Style="{StaticResource Hint}" Margin="0,5,0,0" TextWrapping="Wrap"/>
   </StackPanel>

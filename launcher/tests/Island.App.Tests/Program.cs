@@ -32,7 +32,7 @@ internal static class Program
     }
     private static Button Button(DependencyObject root, string content) => Descendants<Button>(root).First(b => b.Content as string == content);
     private static void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-    private static void ExpandInstanceSettings(InstanceWindow window)
+    private static void ExpandInstanceSettings(FrameworkElement window)
     {
         window.UpdateLayout();
         foreach (var row in Descendants<InstanceSettingRow>(window)) row.Expanded = true;
@@ -44,19 +44,20 @@ internal static class Program
         var container = (ListBoxItem)list.ItemContainerGenerator.ContainerFromItem(list.SelectedItem);
         var menu = container.ContextMenu; menu.PlacementTarget = container; menu.IsOpen = true;
         menu.Items.OfType<MenuItem>().Single(item => item.Header as string == "实例管理").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
     }
     private static void SelectFolder(MainWindow window, string directory) => Find<ItemsControl>(window, "FolderTabs").Items.Cast<RadioButton>().First(tab => GameFolder.SamePath((string)tab.ToolTip, directory)).IsChecked = true;
-    private static async Task WaitUntil(Func<bool> condition, string message)
+    internal static async Task WaitUntil(Func<bool> condition, string message)
     {
         var until = DateTime.UtcNow.AddSeconds(45);
         while (!condition() && DateTime.UtcNow < until) await Task.Delay(60);
         if (!condition()) throw new Exception(message);
     }
     private static string? captureRoot;
-    private static void Capture(Window window, string name)
+    private static void Capture(FrameworkElement window, string name)
     {
         if (captureRoot is null) return;
-        App.SaveCapture((FrameworkElement)window.Content, Path.Combine(captureRoot, name + ".png"));
+        App.SaveCapture(window is Window shell ? (FrameworkElement)shell.Content : window, Path.Combine(captureRoot, name + ".png"));
     }
     [STAThread]
     private static int Main(string[] args)
@@ -311,6 +312,10 @@ internal static class Program
                 {
                     await LaunchOptionsUiTests.Run(window, root, Check, Capture, captureRoot); Console.WriteLine($"ALL {checks} LAUNCH OPTIONS CHECKS PASSED"); return;
                 }
+                if (args.Contains("--navigation-only"))
+                {
+                    await NavigationUiTests.RunAsync(window, root, Check, Capture); Console.WriteLine($"ALL {checks} NAVIGATION CHECKS PASSED"); return;
+                }
                 if (args.Contains("--selection-continue-only"))
                 {
                     await SelectionContinueUiTests.RunAsync(window, root, Check, Capture); Console.WriteLine($"ALL {checks} SELECTION / CONTINUE CHECKS PASSED"); return;
@@ -347,6 +352,7 @@ internal static class Program
                 await MapAppearanceUiTests.RunAsync(window, root, Check, Capture);
                 await JavaCacheUiTests.RunAsync(window, root, Check, Capture);
                 await InstanceContextMenuUiTests.RunAsync(window, root, Check, Capture, captureRoot);
+                await NavigationUiTests.RunAsync(window, root, Check, Capture);
                 await MemoryAllocationUiTests.Run(window, store, Check, Capture, captureRoot);
                 await VerifyManualCleanup();
                 Check(Find<ListBox>(window, "InstanceList").Items.Count == 2, "Discover actual version folders");
@@ -517,7 +523,7 @@ internal static class Program
                 Check(store.Load().ActiveGameFolder.Name == "模组收藏" && tabs.Items.Cast<RadioButton>().Any(tab => ((TextBlock)tab.Content).Text == "模组收藏"), "Renaming an imported folder updates its tab and persists");
                 _ = window.Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    var dialog = app.Windows.OfType<InstanceWindow>().Single(); ExpandInstanceSettings(dialog);
+                    var dialog = (InstancePage)window.ActiveManagementPage!; ExpandInstanceSettings(dialog);
                     Descendants<CheckBox>(dialog).Single(box => box.Name == "FavoriteBox").IsChecked = true; Click(Button(dialog, "保存设置"));
                 }));
                 ManageSelectedInstance(window);
@@ -533,6 +539,7 @@ internal static class Program
                 SelectFolder(window, state.GameDirectory);
                 Find<ListBox>(window, "InstanceList").SelectedItem = Find<ListBox>(window, "InstanceList").Items.Cast<InstanceCard>().Single(c => c.Key == card.Key);
                 Click(Button(window, "↻"));
+                await WaitUntil(() => Find<TextBlock>(window, "RecentWorldName").Text == "林间小屋（测试地图）", "Recent world metadata did not finish loading");
                 Check(Find<TextBlock>(window, "RecentWorldName").Text == "林间小屋（测试地图）" && Find<TextBlock>(window, "RecentPlayedTime").Text.Contains(worldDate.ToString("yyyy.MM.dd  HH:mm")), "Recent play reads actual world name and time from level.dat");
                 logBox.Clear(); Click(Find<Button>(window, "ContinueButton"));
                 await WaitUntil(() => logBox.Text.Contains("游戏已退出") && Find<Button>(window, "LaunchButton").IsEnabled, "Continue did not complete");
@@ -561,6 +568,7 @@ internal static class Program
                 Check(cleanupCalls == 1 && logBox.Text.IndexOf("已回收系统工作集", StringComparison.Ordinal) < logBox.Text.IndexOf("内存：", StringComparison.Ordinal) && logBox.Text.Contains("退出码 0"), "Launch awaits exactly one cleanup before memory allocation and the real fixture JVM");
                 Check(window.DollMemoryFeedback.IsOpen && ((TextBlock)((Border)window.DollMemoryFeedback.Child).Child).Text.Contains("本次释放："), "Automatic cleanup shows the measured released memory in a small result popup");
                 if (captureRoot is not null) App.SaveCapture((FrameworkElement)window.DollMemoryFeedback.Child, Path.Combine(captureRoot, "PreLaunch-Memory-Result.png"));
+                await WaitUntil(() => Find<Button>(window, "ContinueButton").IsEnabled, "Continue did not become available after refreshing the world");
                 cleanupOutcome = MemoryCleanupOutcome.AuthorizationDeclined; logBox.Clear(); Click(Find<Button>(window, "ContinueButton"));
                 await WaitUntil(() => logBox.Text.Contains("游戏已退出") && Find<Button>(window, "LaunchButton").IsEnabled, "Continue after declined authorization did not finish");
                 Check(cleanupCalls == 2 && logBox.Text.Contains("已取消管理员授权") && logBox.Text.Contains("退出码 0"), "Continue uses the same cleanup path and declined UAC still allows the fixture game");
@@ -574,6 +582,7 @@ internal static class Program
                 Check(!store.Load().CleanMemoryBeforeLaunch, "Disabling cleanup persists for subsequent launches");
                 Find<RadioButton>(window, "NavLibrary").IsChecked = true;
                 SelectFolder(window, emptyRoot);
+                await WaitUntil(() => Find<Button>(window, "ContinueButton").IsEnabled, "Global continue did not finish loading");
                 Check(Find<ListBox>(window, "InstanceList").Items.Count == 0 && !Find<Button>(window, "LaunchButton").IsEnabled && Find<Button>(window, "ContinueButton").IsEnabled, "Empty folder keeps its own empty state while global continue remains available");
                 SelectFolder(window, state.GameDirectory);
                 Find<ListBox>(window, "InstanceList").SelectedItem = Find<ListBox>(window, "InstanceList").Items.Cast<InstanceCard>().Single(c => c.Id == "Beta");
@@ -590,9 +599,9 @@ internal static class Program
                 var canceled = app.Windows.OfType<GameFoldersWindow>().Single(); canceled.UpdateLayout(); Descendants<TextBox>(canceled).Single(box => box.Name == "FolderName").Text = "不应保存"; Click(Button(canceled, "取消"));
                 await WaitUntil(() => Find<Border>(window, "OperationPanel").Visibility == Visibility.Collapsed, "Canceled import did not finish");
                 Check(store.Load().GameFolders.Count == 3 && store.Load().GameFolders.Any(f => f.Name == "模组收藏"), "Canceling import preserves existing folder names and does not add duplicates");
-                void EditSelected(Action<InstanceWindow> edit)
+                void EditSelected(Action<InstancePage> edit)
                 {
-                    _ = window.Dispatcher.BeginInvoke(new Action(() => { var dialog = app.Windows.OfType<InstanceWindow>().Single(); ExpandInstanceSettings(dialog); edit(dialog); }));
+                    _ = window.Dispatcher.BeginInvoke(new Action(() => { var dialog = (InstancePage)window.ActiveManagementPage!; ExpandInstanceSettings(dialog); edit(dialog); }));
                     ManageSelectedInstance(window);
                 }
                 void SetIsolation(VersionIsolation mode)
@@ -637,14 +646,15 @@ internal static class Program
                 {
                     _ = window.Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        var modWindow = app.Windows.OfType<ModManagerWindow>().Single(); modWindow.UpdateLayout(); var list = Descendants<ListView>(modWindow).Single();
-                        Check(list.Items.Count == 1 && ((ModFile)list.Items[0]).Path.StartsWith(Path.Combine(otherRoot, "mods")), "Shared mod manager lists root mods");
+                        var modWindow = (ModManagerPage)window.ActiveManagementPage!; modWindow.UpdateLayout(); var list = Descendants<ListView>(modWindow).Single();
+                        Check(list.Items.Count == 1 && ((ModListRow)list.Items[0]).File.Path.StartsWith(Path.Combine(otherRoot, "mods")), "Shared mod manager lists root mods");
                         list.SelectedIndex = 0; Click(Button(modWindow, "停用所选"));
                         Check(!ModFiles.List(otherRoot).Single().Enabled && ModFiles.List(otherInstance).Count == 0, "Shared mod toggle changes only the resolved root mod file");
-                        Capture(modWindow, "ModManager-Shared"); Click(Button(modWindow, "关闭"));
-                    })); Click(Button(dialog, "管理模组"));
-                    Capture(dialog, "InstanceManager-Shared"); Click(Button(dialog, "关闭"));
+                        Capture(modWindow, "ModManager-Shared"); Click(Button(modWindow, "返回"));
+                    })); Click(Button(dialog, "管理模组")); window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                    Capture(dialog, "InstanceManager-Shared"); Click(Button(dialog, "返回"));
                 });
+                await WaitUntil(() => Find<TextBlock>(window, "RecentWorldName").Text == "共享地图（测试地图）", "Shared world metadata did not finish loading");
                 Check(Find<TextBlock>(window, "RecentWorldName").Text == "共享地图（测试地图）", "Recent play reads shared root world metadata");
                 logBox.Clear(); Click(Find<Button>(window, "ContinueButton"));
                 await WaitUntil(() => logBox.Text.Contains("游戏已退出") && Find<Button>(window, "LaunchButton").IsEnabled, "Shared-root continue did not complete");
@@ -792,19 +802,18 @@ internal static class Program
                 for (var sample = 0; sample < 300; sample++) File.WriteAllText(Path.Combine(sampleMods, $"fixture-{sample:000}-很长的模组文件名用于测试省略与完整路径提示.jar"), "fixture");
                 var largeModWindow = new ModManagerWindow(window, modCard) { Left = -15000, Top = 0, WindowStartupLocation = WindowStartupLocation.Manual, ShowInTaskbar = false }; largeModWindow.Show(); largeModWindow.UpdateLayout();
                 var largeModList = Descendants<ListView>(largeModWindow).Single(); var modSearch = Descendants<TextBox>(largeModWindow).Single(box => box.Name == "ModSearchBox"); var modFilter = Descendants<ComboBox>(largeModWindow).Single(box => box.Name == "ModFilterBox");
-                Check(largeModList.Items.Count == 301 && largeModList.ActualHeight > 240, "Dedicated mod manager shows a tall scrollable table for hundreds of mods");
+                Check(largeModList.Items.Count == 301 && largeModList.ActualHeight > 240, "Dedicated mod manager shows a tall scrollable list for hundreds of mods");
                 modSearch.Text = "FIXTURE-"; Check(largeModList.Items.Count == 300, "Mod filename search ignores case and excludes nonmatching files");
                 largeModList.SelectedItems.Add(largeModList.Items[0]); largeModList.SelectedItems.Add(largeModList.Items[1]); Click(Button(largeModWindow, "停用所选")); modFilter.SelectedIndex = 2;
                 Check(largeModList.Items.Count == 2 && ModFiles.List(modCard.RuntimeDirectory).Count(file => file.Name.StartsWith("fixture-") && !file.Enabled) == 2, "Batch mod disable updates files and works with disabled-state filtering");
-                foreach (var item in largeModList.Items.Cast<ModFile>().ToArray()) largeModList.SelectedItems.Add(item); Click(Button(largeModWindow, "启用所选"));
+                foreach (var item in largeModList.Items.Cast<ModListRow>().ToArray()) largeModList.SelectedItems.Add(item); Click(Button(largeModWindow, "启用所选"));
                 Check(largeModList.Items.Count == 0 && ModFiles.List(modCard.RuntimeDirectory).Count(file => file.Name.StartsWith("fixture-") && file.Enabled) == 300, "Batch re-enable updates the disabled filter without deleting mod files");
                 modSearch.Clear(); modFilter.SelectedIndex = 0; largeModWindow.UpdateLayout();
                 foreach (var size in new[] { (920d, 690d), (740d, 520d) })
                 {
                     largeModWindow.Width = size.Item1; largeModWindow.Height = size.Item2; largeModWindow.UpdateLayout();
-                    var columns = ((GridView)largeModList.View).Columns;
-                    Check(Math.Abs(columns.Sum(column => column.Width) - largeModList.ActualWidth) <= 20 && Button(largeModWindow, "关闭").TransformToAncestor(largeModWindow).Transform(new Point(0, Button(largeModWindow, "关闭").ActualHeight)).Y < largeModWindow.ActualHeight,
-                        $"Mod columns fill the table and actions remain visible at {(int)size.Item1}px");
+                    Check(largeModList.View is null && largeModList.ItemTemplate is not null && Button(largeModWindow, "关闭").TransformToAncestor(largeModWindow).Transform(new Point(0, Button(largeModWindow, "关闭").ActualHeight)).Y < largeModWindow.ActualHeight,
+                        $"Mod list rows and actions remain visible at {(int)size.Item1}px");
                     Capture(largeModWindow, "ModManager-Large-" + (int)size.Item1);
                 }
                 largeModWindow.Close();

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -151,9 +152,9 @@ public sealed class ModpackCatalog(AppSettings settings, DownloadClient network,
         return new(files, next);
     }
 
-    public async Task<string> DownloadArchiveAsync(CatalogProject project, CatalogVersion version, string directory, CancellationToken token)
+    public async Task<string> DownloadArchiveAsync(CatalogProject project, CatalogVersion version, string directory, CancellationToken token, IProgress<InstallProgress>? progress = null)
     {
-        string url;
+        string[] urls;
         long? size;
         string? sha1;
         string? sha512 = null;
@@ -162,33 +163,44 @@ public sealed class ModpackCatalog(AppSettings settings, DownloadClient network,
         {
             var files = version.Data.Array("files").OfType<JsonObject>().Where(f => f.Str("filename").EndsWith(".mrpack", StringComparison.OrdinalIgnoreCase)).ToList();
             var file = files.FirstOrDefault(f => f["primary"]?.GetValue<bool>() == true) ?? files.FirstOrDefault() ?? throw new InvalidDataException("此版本缺少 .mrpack 整合包文件。");
-            url = file.Str("url"); size = file.Long("size"); sha1 = (file["hashes"]).Str("sha1"); sha512 = (file["hashes"]).Str("sha512"); extension = ".mrpack";
+            urls = [file.Str("url")]; size = file.Long("size"); sha1 = (file["hashes"]).Str("sha1"); sha512 = (file["hashes"]).Str("sha512"); extension = ".mrpack";
             if (sha1.Length != 40 || sha512.Length != 128) throw new InvalidDataException("整合包缺少有效的哈希校验值。");
         }
         else
         {
             RequireCurseForgeKey();
-            var info = (await network.GetJsonAsync($"https://api.curseforge.com/v1/mods/{project.Id}", token, settings.CurseForgeApiKey)).Object("data");
-            if (info["allowModDistribution"]?.GetValue<bool>() == false)
-                throw new IOException("作者未开放第三方下载，请通过 CurseForge 官方项目页获取文件。");
-            _ = long.Parse(project.Id, CultureInfo.InvariantCulture); _ = long.Parse(version.Id, CultureInfo.InvariantCulture);
-            var response = await network.GetJsonAsync($"https://api.curseforge.com/v1/mods/{project.Id}/files/{version.Id}", token, settings.CurseForgeApiKey);
-            var file = response.Object("data");
-            if (file["isServerPack"]?.GetValue<bool>() == true || file["isAvailable"]?.GetValue<bool>() == false || !file.Str("fileName").EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            if (!long.TryParse(project.Id, NumberStyles.None, CultureInfo.InvariantCulture, out var projectId) || projectId <= 0
+                || !long.TryParse(version.Id, NumberStyles.None, CultureInfo.InvariantCulture, out var fileId) || fileId <= 0)
+                throw new InvalidDataException("CurseForge 整合包的项目或文件 ID 无效。");
+            var fileApi = FormattableString.Invariant($"https://api.curseforge.com/v1/mods/{projectId}/files/{fileId}");
+            var file = version.Data;
+            if (file.Long("modId") != projectId || file.Long("id") != fileId || file.Long("fileLength") is not > 0 || file.Array("hashes").Count == 0)
+                file = (await network.GetJsonAsync(fileApi, token, settings.CurseForgeApiKey)).Object("data");
+            if (file.Long("modId") != projectId || file.Long("id") != fileId || file["isServerPack"]?.GetValue<bool>() == true
+                || file["isAvailable"]?.GetValue<bool>() == false || !file.Str("fileName").EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("此发布文件不是可用的客户端整合包 ZIP。");
-            url = file.Str("downloadUrl");
-            if (url.Length == 0)
-            {
-                var download = await network.GetJsonAsync($"https://api.curseforge.com/v1/mods/{project.Id}/files/{version.Id}/download-url", token, settings.CurseForgeApiKey);
-                url = download.Str("data");
-            }
-            if (string.IsNullOrWhiteSpace(url)) throw new IOException("此整合包没有开放第三方下载。可从项目网站取得 ZIP 后导入。");
             size = file.Long("fileLength");
             sha1 = file.Array("hashes").FirstOrDefault(h => Number(h, "algo") == 1).Str("value"); extension = ".zip";
-            if (sha1.Length != 40) throw new InvalidDataException("CurseForge 未提供有效的 SHA-1 校验值。");
+            if (size is not > 0 || sha1.Length != 40 || !sha1.All(Uri.IsHexDigit))
+                throw new InvalidDataException("CurseForge 未提供可校验的整合包大小或 SHA-1。");
+            var url = file.Str("downloadUrl");
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                try { url = (await network.GetJsonAsync(fileApi + "/download-url", token, settings.CurseForgeApiKey)).Str("data"); }
+                catch (CurseForgeRequestException ex) when (ex.Status == HttpStatusCode.Forbidden) { url = ""; }
+            }
+            urls = string.IsNullOrWhiteSpace(url) ? DownloadClient.CurseForgeCdnUrls(fileId, SafePaths.InstanceName(file.Str("fileName"))) : [url];
         }
         var path = SafePaths.Under(directory, $"{project.Platform}-{SafePaths.InstanceName(project.Id)}-{SafePaths.InstanceName(version.Id)}{extension}");
-        await network.DownloadAsync(new(path, [url], size, sha1, sha512), token);
+        long lastReport = 0;
+        await network.DownloadAsync(new(path, urls, size, sha1, sha512), token, onFilePosition: progress is null ? null : position =>
+        {
+            var now = Environment.TickCount64;
+            if (now - lastReport < 160) return;
+            lastReport = now;
+            var completed = size is > 0 ? (int)Math.Clamp(1000d * position / size.Value, 0, 1000) : 0;
+            progress.Report(new("下载整合包文件", version.Name, completed, size is > 0 ? 1000 : 0, network.Bytes, network.Speed));
+        });
         return path;
     }
 

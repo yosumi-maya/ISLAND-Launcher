@@ -50,6 +50,7 @@ internal static class LaunchOptionsUiTests
             window.Show(); window.UpdateLayout(); await Task.Delay(80);
             var thumbnail = (Image)window.FindName("RecentWorldThumbnail"); var name = (TextBlock)window.FindName("RecentWorldName");
             var thumbnailFrame = (FrameworkElement)window.FindName("RecentWorldThumbnailFrame");
+            await Program.WaitUntil(() => name.Text == "最近世界封面", "World thumbnail metadata did not finish loading");
             check(thumbnail.Source is not null && name.Text == "最近世界封面" && thumbnailFrame.IsVisible, "Recent-world card displays the selected world's actual icon.png in its own frame");
             foreach (var size in new[] { (1240d, 830d), (1020d, 700d) })
             {
@@ -65,8 +66,10 @@ internal static class LaunchOptionsUiTests
             }
             File.WriteAllText(icon, "invalid png");
             var refresh = Children<Button>(window).Single(button => button.Content as string == "↻"); refresh.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            await Program.WaitUntil(() => name.Text == "最近世界封面", "Corrupt-icon world metadata did not finish loading");
             check(thumbnail.Source is null && name.Text == "最近世界封面" && !thumbnailFrame.IsVisible, "A corrupt world icon hides the square without losing metadata or the configured map background");
             File.Delete(icon); refresh.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            await Program.WaitUntil(() => name.Text == "最近世界封面", "Missing-icon world metadata did not finish loading");
             check(thumbnail.Source is null && name.Text == "最近世界封面", "A missing world icon remains a valid recent-world record");
         }
         finally { window.Close(); }

@@ -148,8 +148,8 @@ public sealed class AppearanceEditor : StackPanel
     }
     private string ThemeSurfaceColor()
     {
-        var resource = current switch { SurfaceArea.Window or SurfaceArea.Content => "WindowBackground", SurfaceArea.Hero => "HeroBackground", SurfaceArea.Sidebar => "SidebarBackground",
-            SurfaceArea.LaunchBar => "AccentSoft", SurfaceArea.RecentMap => "HeroSurface", _ => "Surface" };
+        var resource = current switch { SurfaceArea.Window => "WindowBackground", SurfaceArea.Content => "ContentBackground", SurfaceArea.Hero => "HeroBackground", SurfaceArea.Sidebar => "SidebarBackground",
+            SurfaceArea.RecentMap => "HeroSurface", _ => "Surface" };
         var rgb = ((previewTheme?[resource] ?? TryFindResource(resource)) as SolidColorBrush)?.Color ?? Colors.White;
         return $"#{rgb.R:X2}{rgb.G:X2}{rgb.B:X2}";
     }

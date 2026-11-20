@@ -71,6 +71,7 @@ try
     await ContentDownloadTests.RunAsync(root, Check);
     await CurseForgeTests.RunAsync(root, Check);
     await ContentInstallationInspectorTests.RunAsync(root, Check);
+    await ModDownloadPageTests.RunAsync(root, Check);
     AppearanceTests.Run(root, Check);
     InstanceCatalogTests.Run(root, Check);
     MemoryCleanupTests.Run(root, Check);

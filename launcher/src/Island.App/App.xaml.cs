@@ -41,8 +41,9 @@ public partial class App : Application
                     if (presetIndex >= 0)
                     {
                         if (dataPath is null || presetIndex + 1 >= e.Args.Length) throw new ArgumentException("预设截图需要独立 --data-dir 和预设颜色。");
-                        var buttons = (WrapPanel)window.FindName("ThemePresetButtons");
-                        var preset = buttons.Children.OfType<Button>().Single(button => string.Equals(button.Tag as string, e.Args[presetIndex + 1], StringComparison.OrdinalIgnoreCase));
+                        var buttons = new[] { "ThemePresetButtons", "AppearanceModeButtons" }
+                            .SelectMany(name => ((WrapPanel)window.FindName(name)).Children.OfType<Button>());
+                        var preset = buttons.Single(button => string.Equals(button.Tag as string, e.Args[presetIndex + 1], StringComparison.OrdinalIgnoreCase));
                         preset.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
                         await Task.Delay(180);
                     }

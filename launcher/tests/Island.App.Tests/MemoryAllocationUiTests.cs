@@ -35,7 +35,7 @@ internal static class MemoryAllocationUiTests
             sample.MemorySlider.Focus(); var beforeKey = sample.MemorySlider.Value;
             sample.MemorySlider.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(sample.MemorySlider)!, Environment.TickCount, Key.Right) { RoutedEvent = Keyboard.KeyDownEvent });
             check(sample.MemorySlider.Value == beforeKey + 256, "The memory slider supports 256 MB keyboard steps");
-            check(sample.MemorySlider.IsKeyboardFocused && ((SolidColorBrush)sample.MemorySlider.Background).Color == ((SolidColorBrush)host.Resources["AccentSoft"]).Color, "Keyboard focus gives the custom memory slider a visible theme-colored highlight");
+            check(sample.MemorySlider.IsKeyboardFocused && ((SolidColorBrush)sample.MemorySlider.Background).Color == ((SolidColorBrush)host.Resources["SelectionBackground"]).Color, "Keyboard focus gives the custom memory slider a visible selection highlight");
             var track = (Track)sample.MemorySlider.Template.FindName("PART_Track", sample.MemorySlider);
             var beforeDrag = sample.ManualMemoryMb;
             track.Thumb.RaiseEvent(new DragDeltaEventArgs(60, 0) { RoutedEvent = Thumb.DragDeltaEvent });

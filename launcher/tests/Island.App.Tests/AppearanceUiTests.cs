@@ -294,11 +294,12 @@ internal static class AppearanceUiTests
     {
         var initial = store.Load(); var settings = (ScrollViewer)window.FindName("SettingsPage"); settings.ScrollToTop(); window.UpdateLayout();
         var presets = (WrapPanel)window.FindName("ThemePresetButtons");
+        var modes = (WrapPanel)window.FindName("AppearanceModeButtons");
         var hide = (CheckBox)window.FindName("HideSidebarDollBox"); var doll = (SkinPreview3D)window.FindName("SidebarDoll");
         var preview = (AppearancePreview)((ContentControl)window.FindName("AppearancePreviewHost")).Content;
         var editor = (AppearanceEditor)((ContentControl)window.FindName("BackgroundAppearanceHost")).Content;
-        void Preset(string hex) => Children<Button>(presets).Single(button => button.Tag as string == hex).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-        check(presets.Children.Count == AppearancePresets.All.Count && presets.Children.Count == 20 && window.FindName("SaveQuickAppearanceButton") is null, "Twenty one-click presets include curated light and dark schemes without a redundant confirmation button");
+        void Preset(string hex) => Children<Button>(presets).Concat(Children<Button>(modes)).Single(button => button.Tag as string == hex).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+        check(presets.Children.Count == 18 && modes.Children.Count == 3 && window.FindName("SaveQuickAppearanceButton") is null, "Accent swatches and full appearance modes are presented separately");
         foreach (var hex in new[] { "#F44336", "#2563EB", "#EC4899", "#EAB308" })
         {
             Preset(hex); window.UpdateLayout();
@@ -346,6 +347,11 @@ internal static class AppearanceUiTests
         check(failureShown && hide.IsChecked == false && doll.IsVisible && !store.Load().Appearance.HideSidebarDoll,
             "A paper doll save failure restores the switch and leaves the actual model visible");
 
+        Preset("#2563EB"); window.UpdateLayout();
+        check(store.Load().ThemeColor == "#2563EB" && store.Load().Appearance.Instances.Opacity == 1
+            && preview.RenderContext.Current.Instances.Opacity == .31,
+            "A color swatch preserves saved materials and the unsaved surface draft");
+
         Preset("#00AAC8"); window.UpdateLayout();
         var glass = store.Load(); var background = glass.Appearance.Window.ImagePath;
         check(glass.ThemeColor == "#00AAC8" && File.Exists(background) && Path.GetDirectoryName(background) == Path.Combine(store.DirectoryPath, "Backgrounds")
@@ -364,11 +370,15 @@ internal static class AppearanceUiTests
         var restored = new MainWindow(store) { Left = -16000, Top = 0, WindowStartupLocation = WindowStartupLocation.Manual, ShowInTaskbar = false };
         restored.Show(); restored.UpdateLayout();
         check(AppearanceRenderer.Current.Content.Opacity == .18 && ((SolidColorBrush)((Button)restored.FindName("LaunchButton")).Background).Color == (Color)ColorConverter.ConvertFromString("#00AAC8")
-            && Children<Button>((WrapPanel)restored.FindName("ThemePresetButtons")).Single(button => button.Tag as string == "#00AAC8").BorderThickness.Left == 1,
+            && Children<Button>((WrapPanel)restored.FindName("AppearanceModeButtons")).Single(button => button.Tag as string == "#00AAC8").BorderThickness.Left == 1,
             "A fresh window restores the immediately saved glass theme and its active preset indicator"); restored.Close();
         Preset("#EC4899"); window.UpdateLayout();
-        check(store.Load().Appearance.Window.ImagePath.Length == 0 && store.Load().Appearance.Instances.Material == SurfaceMaterial.Solid && store.Load().Appearance.Content.Opacity == 1,
-            "Switching from glass to a plain preset restores the whole plain appearance");
+        check(store.Load().Appearance == glass.Appearance && store.Load().ThemeColor == "#EC4899",
+            "Selecting a new color keeps the chosen glass wallpaper and material configuration");
+        Preset("default"); window.UpdateLayout();
+        check(store.Load().Appearance.Window.ImagePath.Length == 0 && store.Load().Appearance.Instances.Material == SurfaceMaterial.Solid
+            && store.Load().Appearance.Content.Opacity == 1 && store.Load().ThemeColor == "#EC4899",
+            "The explicit default appearance restores neutral surfaces and keeps the chosen accent color");
         foreach (var size in new[] { (1020d, 700d), (1240d, 830d) })
         {
             window.Width = size.Item1; window.Height = size.Item2; settings.ScrollToTop(); window.UpdateLayout();

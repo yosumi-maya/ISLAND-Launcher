@@ -5,11 +5,11 @@ namespace Island.Core;
 
 public static class AppearanceSettings
 {
-    public const string DefaultColor = "#32634D";
+    public const string DefaultColor = "#2D7568";
     public static string NormalizeColor(string? value)
     {
         var color = value?.Trim() ?? "";
-        if (!Regex.IsMatch(color, "^#[0-9a-fA-F]{6}$")) throw new ArgumentException("主题颜色请填写 #RRGGBB，例如 #32634D。");
+        if (!Regex.IsMatch(color, "^#[0-9a-fA-F]{6}$")) throw new ArgumentException("主题颜色请填写 #RRGGBB，例如 #2D7568。");
         return color.ToUpperInvariant();
     }
 }

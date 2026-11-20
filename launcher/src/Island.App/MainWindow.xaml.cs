@@ -33,6 +33,7 @@ public partial class MainWindow : Window
     private DateTime lastProgress;
     private readonly SemaphoreSlim logGate = new(1, 1);
     private InstanceCard? Selected => InstanceList.SelectedItem as InstanceCard;
+    private string ActiveInstanceKey => GameFolder.NormalizePath(state.GameDirectory).ToUpperInvariant() + "|" + state.SelectedInstanceId;
     public MainWindow(LauncherStore? launcherStore = null, Func<IReadOnlyList<string>?>? gameFolderPicker = null, Func<string?>? skinPicker = null, Func<string?>? backgroundPicker = null,
         Func<CancellationToken, Task<MemoryCleanupResult>>? memoryCleaner = null, Func<string, IDisposable>? gpuPreferenceFactory = null, Action<string>? instanceDirectoryOpener = null,
         JavaRuntimeCache? javaRuntimes = null, ILauncherDownloads? downloadService = null, BlockDock.App.DownloadQueue? downloadQueue = null,
@@ -46,6 +47,7 @@ public partial class MainWindow : Window
         InitializeComponent(); InitializeAppearance(backgroundPicker);
         InitializeDownloads(downloadService, downloadQueue, confirmDownloadClose, contentService);
         InitializeInstanceMenus();
+        Closed += (_, _) => ClearManagement();
         MultiplayerPage.Initialize(multiplayerSession ?? new TerracottaSession(store.DirectoryPath),()=>state.Accounts.FirstOrDefault(a=>a.Id==state.SelectedAccountId)?.Name ?? "ISLAND 玩家",()=>
         {
             var directory=Path.Combine(store.DirectoryPath,"multiplayer","terracotta-0.4.2","temp","terracotta");Directory.CreateDirectory(directory);OpenPath(directory);
@@ -79,7 +81,7 @@ public partial class MainWindow : Window
         ready = true; NavLibrary.IsChecked = true;
         Loaded += (_, _) =>
         {
-            try { ReloadLibrary(); ReloadAccounts(); Log("岛屿启动器 1.0.0 已就绪。"); if (store.LoadWarning is not null) Log(store.LoadWarning); }
+            try { ReloadLibrary(); ReloadAccounts(); Log("岛屿启动器 1.1.0 已就绪。"); if (store.LoadWarning is not null) Log(store.LoadWarning); }
             catch (Exception ex) { Report(ex); }
             _ = RefreshJavaAsync(false);
         };
@@ -87,27 +89,26 @@ public partial class MainWindow : Window
     private void Navigate(object sender, RoutedEventArgs e)
     {
         if (!ready || sender is not RadioButton button) return;
+        ClearManagement();
         var page = button.Tag as string;
-        LibraryPage.Visibility = page == "Library" ? Visibility.Visible : Visibility.Collapsed;
-        AccountsPage.Visibility = page == "Accounts" ? Visibility.Visible : Visibility.Collapsed;
-        MultiplayerPage.Visibility = page == "Multiplayer" ? Visibility.Visible : Visibility.Collapsed;
-        LogsPage.Visibility = page == "Logs" ? Visibility.Visible : Visibility.Collapsed;
-        SettingsPage.Visibility = page == "Settings" ? Visibility.Visible : Visibility.Collapsed;
-        DownloadCenterView.Visibility = page == "Downloads" ? Visibility.Visible : Visibility.Collapsed;
+        var target = page switch
+        {
+            "Accounts" => (FrameworkElement)AccountsPage, "Downloads" => DownloadCenterView,
+            "Multiplayer" => MultiplayerPage, "Logs" => LogsPage, "Settings" => SettingsPage, _ => LibraryPage
+        };
+        ShowPage(target);
         if (page == "Downloads" && !DownloadCenterView.IsPreparingArchive) DownloadCenterView.Activate();
-        AppearancePage.Visibility = Visibility.Collapsed;
     }
-    private void ReloadLibrary(bool preserveSelection = true)
+    private void ReloadLibrary(string? selected = null)
     {
-        var key = preserveSelection ? Selected?.Key : null;
-        key ??= GameFolder.NormalizePath(state.GameDirectory).ToUpperInvariant() + "|" + state.SelectedInstanceId;
+        var key = selected ?? Selected?.Key ?? ActiveInstanceKey;
         RefreshFolderTabs(); cards = [];
         foreach (var folder in state.GameFolders)
         {
             try { cards.AddRange(InstanceCatalog.ListInstalled(folder.Directory).Select(instance => new InstanceCard(instance, state.For(folder.Directory, instance.Name), folder.Name, folder.Isolation))); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Log("目录暂不可访问：" + folder.Name); }
         }
-        ApplyFilter(key); RefreshRecentGame();
+        ApplyFilter(key);
     }
     private void ApplyFilter(string? selected = null)
     {
@@ -116,22 +117,31 @@ public partial class MainWindow : Window
         var search = SearchBox.Text.Trim();
         var visible = cards.Where(c => (state.ShowFavorites ? c.Preferences.Favorite : GameFolder.SamePath(c.GameDirectory, state.GameDirectory)) && (search.Length == 0 || (c.DisplayName + " " + c.Id + " " + c.VersionLine + " " + c.Loader + " " + c.FolderName).Contains(search, StringComparison.OrdinalIgnoreCase)))
             .OrderByDescending(c => c.Preferences.Favorite).ThenByDescending(c => c.Preferences.LastPlayed).ThenBy(c => c.DisplayName, StringComparer.CurrentCultureIgnoreCase).ToList();
-        InstanceList.ItemsSource = visible;
-        InstanceList.SelectedItem = visible.FirstOrDefault(c => c.Key == selected) ?? visible.FirstOrDefault();
+        updatingFolders = true;
+        try
+        {
+            InstanceList.ItemsSource = visible;
+            InstanceList.SelectedItem = visible.FirstOrDefault(c => c.Key == selected) ?? visible.FirstOrDefault();
+        }
+        finally { updatingFolders = false; }
         InstanceCount.Text = $"{visible.Count} 个世界";
         EmptyLibrary.Visibility = visible.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         var filtered = state.ShowFavorites || search.Length > 0;
         EmptyTitle.Text = filtered ? "暂时没有匹配的实例" : "给第一个世界留个位置";
         EmptyDescription.Text = filtered ? "试试其他关键词，或在文件夹标签中收藏喜欢的实例。" : "创建一个新实例，或导入下载器 / 其他启动器的 .minecraft 目录。";
         EmptyCreateButton.Visibility = filtered ? Visibility.Collapsed : Visibility.Visible;
-        UpdateSelected();
+        UpdateLibrarySelection();
     }
     private void SearchChanged(object sender, TextChangedEventArgs e) => ApplyFilter();
     private void SelectInstance(object sender, SelectionChangedEventArgs e)
     {
         if (!ready || updatingFolders) return;
+        UpdateLibrarySelection();
+    }
+    private void UpdateLibrarySelection()
+    {
         if (Selected is { } selected) state.RememberInstance(selected.Id, selected.GameDirectory);
-        RefreshRecentGame();
+        _ = RefreshRecentGameAsync();
         UpdateSelected();
     }
     private void UpdateSelected()

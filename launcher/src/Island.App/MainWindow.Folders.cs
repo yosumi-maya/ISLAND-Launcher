@@ -14,17 +14,29 @@ public partial class MainWindow
         var previous = updatingFolders; updatingFolders = true;
         try
         {
-            FilterFavorites.IsChecked = state.ShowFavorites;
-            FolderTabs.Items.Clear();
-            foreach (var folder in state.GameFolders)
+            var tabs = FolderTabs.Items.OfType<RadioButton>().ToArray();
+            if (!tabs.Select(tab => (string)tab.Tag).SequenceEqual(state.GameFolders.Select(folder => folder.Id)))
             {
-                var tab = new RadioButton
+                FolderTabs.Items.Clear();
+                foreach (var folder in state.GameFolders)
                 {
-                    Content = new TextBlock { Text = folder.Name, MaxWidth = 155, TextWrapping = TextWrapping.NoWrap, TextTrimming = TextTrimming.CharacterEllipsis },
-                    Tag = folder.Id, ToolTip = folder.Directory, GroupName = "LibraryFolders", Style = (Style)FindResource("Filter"),
-                    IsChecked = !state.ShowFavorites && folder.Id == state.SelectedGameFolderId
-                };
-                tab.Checked += ChangeGameFolder; FolderTabs.Items.Add(tab);
+                    var tab = new RadioButton
+                    {
+                        Content = new TextBlock { MaxWidth = 155, TextWrapping = TextWrapping.NoWrap, TextTrimming = TextTrimming.CharacterEllipsis },
+                        Tag = folder.Id, GroupName = "LibraryFolders", Style = (Style)FindResource("Filter")
+                    };
+                    tab.Checked += ChangeGameFolder;
+                    FolderTabs.Items.Add(tab);
+                }
+                tabs = FolderTabs.Items.OfType<RadioButton>().ToArray();
+            }
+
+            FilterFavorites.IsChecked = state.ShowFavorites;
+            foreach (var (tab, folder) in tabs.Zip(state.GameFolders))
+            {
+                ((TextBlock)tab.Content).Text = folder.Name;
+                tab.ToolTip = folder.Directory;
+                tab.IsChecked = !state.ShowFavorites && folder.Id == state.SelectedGameFolderId;
             }
         }
         finally { updatingFolders = previous; }
@@ -34,20 +46,26 @@ public partial class MainWindow
         if (!ready || updatingFolders || sender is not RadioButton { Tag: string id }) return;
         var folder = state.GameFolders.First(folder => folder.Id == id);
         if (operation is not null && game is null) { RefreshFolderTabs(); return; }
-        try { ActivateGameFolder(folder.Id); StatusLabel.Text = game is not null ? "●  游戏运行中 · 当前浏览：" + folder.Name : "●  当前游戏目录：" + folder.Name; }
+        try
+        {
+            ActivateGameFolder(folder.Id);
+            PageTransitions.EnterFolderResults(InstanceResults);
+            StatusLabel.Text = game is not null ? "●  游戏运行中 · 当前浏览：" + folder.Name : "●  当前游戏目录：" + folder.Name;
+        }
         catch (Exception ex) { RefreshFolderTabs(); Report(ex); }
     }
     private void ShowFavoriteFolders(object sender, RoutedEventArgs e)
     {
         if (!ready || updatingFolders) return;
         state.ShowFavorites = true; RefreshFolderTabs(); ApplyFilter();
+        PageTransitions.EnterFolderResults(InstanceResults);
     }
     private void ScrollFolderTabs(object sender, MouseWheelEventArgs e)
     {
         if (FolderTabsScroll.ScrollableWidth <= 0) return;
         FolderTabsScroll.ScrollToHorizontalOffset(FolderTabsScroll.HorizontalOffset - e.Delta); e.Handled = true;
     }
-    private void ActivateGameFolder(string id)
+    private void ActivateGameFolder(string id, bool reload = false)
     {
         updatingFolders = true;
         try
@@ -56,7 +74,13 @@ public partial class MainWindow
             SearchBox.Clear();
         }
         finally { updatingFolders = false; }
-        ReloadLibrary(false); store.Save(state);
+        if (reload) ReloadLibrary(ActiveInstanceKey);
+        else
+        {
+            RefreshFolderTabs();
+            ApplyFilter(ActiveInstanceKey);
+        }
+        store.Save(state);
     }
     private static GameFolderDraft DescribeFolder(GameFolder folder)
     {
@@ -94,7 +118,7 @@ public partial class MainWindow
             var registered = state.AddGameFolder(folder.Directory, folder.Name);
             registered.Name = GameFolder.ValidateName(folder.Name); registered.Isolation = folder.Isolation; first ??= registered;
         }
-        ActivateGameFolder(first!.Id);
+        ActivateGameFolder(first!.Id, reload: true);
         Log($"已连接 {imports.Count} 个游戏目录，当前：{state.ActiveGameFolder.Name}");
         StatusLabel.Text = $"●  已连接 {imports.Count} 个目录 · 当前：{state.ActiveGameFolder.Name}";
     }

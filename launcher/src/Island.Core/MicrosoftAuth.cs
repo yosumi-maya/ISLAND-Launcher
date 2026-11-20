@@ -19,7 +19,7 @@ public sealed partial class MicrosoftAuth : IDisposable
     {
         http = new HttpClient(handler ?? CreateHandler(verifyCertificates));
         http.Timeout = TimeSpan.FromSeconds(45);
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("IslandLauncher/1.0.0");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("IslandLauncher/1.1.0");
     }
     internal static HttpClientHandler CreateHandler(bool verifyCertificates)
     {

@@ -62,8 +62,15 @@ public partial class DownloadCenter : UserControl
                 Directory.CreateDirectory(logDirectory); task.LogPath = Path.Combine(logDirectory, task.Id.ToString("N") + ".log");
                 await File.WriteAllTextAsync(task.LogPath, task.LogText, token);
             }
-            return task.Work is { } work ? await work.Run(task.Settings, progress, token)
-                : await this.service.InstallAsync(task.Settings, task.Request, task.Pack, progress, token);
+            if (task.Work is { } work) return await work.Run(task.Settings, progress, token);
+            if (task.OnlinePack is { } online)
+            {
+                var pack = await Task.Run(() => this.service.PrepareAsync(task.Settings, online.Project, online.Release, token, progress), token);
+                token.ThrowIfCancellationRequested();
+                DownloadAvailability.RequireSupported(pack, task.Settings);
+                task.SetPreparedPack(PackConfirmationWindow.RequestFor(pack, task.Settings, task.Name), pack);
+            }
+            return await this.service.InstallAsync(task.Settings, task.Request, task.Pack, progress, token);
         });
         this.queue.Changed += Changed; this.queue.TaskSettled += Settled;
         TaskList.ItemsSource = this.queue.Items; initialized = true; UpdateQueue(); timer.Start();
@@ -85,25 +92,39 @@ public partial class DownloadCenter : UserControl
         PacksPage.Visibility = catalog ? Visibility.Visible : Visibility.Collapsed;
         TasksPage.Visibility = tab.Tag as string == "Tasks" ? Visibility.Visible : Visibility.Collapsed;
         if (catalog) SelectCatalog(page!);
+        PageTransitions.Enter(catalog ? PacksPage : page == "Tasks" ? TasksPage : GamesPage);
         if ((GamesTab.IsChecked == true || (catalog && versions.Count == 0)) && gamesCancellation is null) _ = LoadGamesAsync();
     }
-    private async void ReloadGames(object sender, RoutedEventArgs e) => await LoadGamesAsync();
-    internal async Task LoadGamesAsync()
+    private async void ReloadGames(object sender, RoutedEventArgs e) => await LoadGamesAsync(refresh: true);
+    internal async Task LoadGamesAsync(bool refresh = false)
     {
-        if (closed) return;
-        gamesCancellation?.Cancel();
+        if (closed || gamesCancellation is not null || (!refresh && versions.Count > 0)) return;
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token); cancellation.CancelAfter(TimeSpan.FromSeconds(45));
-        gamesCancellation = cancellation; ReloadGamesButton.IsEnabled = false; InstallGameButton.IsEnabled = false; GameStatus.Text = "正在读取 Minecraft 版本列表…";
+        gamesCancellation = cancellation;
+        ReloadGamesButton.IsEnabled = false;
+        GameStatus.Text = refresh ? "正在刷新 Minecraft 版本列表…" : "正在读取 Minecraft 版本列表…";
         try
         {
-            var found = await service.GetGamesAsync(DownloadAvailability.Snapshot(settings()), cancellation.Token);
-            cancellation.Token.ThrowIfCancellationRequested(); versions = found; FilterGames(this, new RoutedEventArgs());
+            var snapshot = DownloadAvailability.Snapshot(settings());
+            var found = refresh
+                ? await service.RefreshGamesAsync(snapshot, cancellation.Token)
+                : await service.GetGamesAsync(snapshot, cancellation.Token);
+            cancellation.Token.ThrowIfCancellationRequested();
+            if (found.Count == 0) throw new InvalidDataException("版本列表为空。");
+            versions = found;
+            FilterGames(this, new RoutedEventArgs());
             VersionFilter.SetVersions(PackGameVersion, found.Where(v => v.Type == "release").Select(v => v.Id));
         }
-        catch (OperationCanceledException) { if (!closed && gamesCancellation == cancellation) GameStatus.Text = "版本查询已取消或超时，请刷新重试。"; }
-        catch (Exception ex) { if (!closed && gamesCancellation == cancellation) GameStatus.Text = "无法读取版本列表：" + ex.Message; }
+        catch (OperationCanceledException) { ShowGameListError("版本查询已取消或超时。"); }
+        catch (Exception ex) { ShowGameListError("无法读取版本列表：" + ex.Message); }
         finally { if (gamesCancellation == cancellation) { gamesCancellation = null; ReloadGamesButton.IsEnabled = !closed; } }
     }
+    private void ShowGameListError(string message)
+    {
+        if (closed) return;
+        GameStatus.Text = versions.Count > 0 ? "继续使用上次的版本列表。 " + message : message + " 请刷新重试。";
+    }
+
     private void FilterGames(object sender, RoutedEventArgs e)
     {
         if (!initialized) return;
@@ -163,12 +184,14 @@ public partial class DownloadCenter : UserControl
         }
         catch (Exception ex) { GameStatus.Text = ex.Message; }
     }
-    internal DownloadTask Enqueue(InstallRequest request, AppSettings snapshot, PackInfo? pack = null)
+    internal DownloadTask Enqueue(InstallRequest request, AppSettings snapshot, PackInfo? pack = null, PackReleaseDownload? onlinePack = null)
     {
         if (!canInstall()) throw new InvalidOperationException("请等待当前启动任务或游戏结束后再添加下载任务。");
         DownloadAvailability.RequireSupported(pack, snapshot);
+        if (onlinePack?.Project.Platform == PackPlatform.CurseForge && string.IsNullOrWhiteSpace(snapshot.CurseForgeApiKey))
+            throw new InvalidOperationException(DownloadAvailability.CurseForgeNotice);
         request = request with { InstanceName = InstanceCatalog.RequireAvailableName(snapshot.GameDirectory, request.InstanceName) };
-        var task = Queue.Enqueue(request, DownloadAvailability.Snapshot(snapshot), pack); TasksTab.IsChecked = true; return task;
+        var task = Queue.Enqueue(request, DownloadAvailability.Snapshot(snapshot), pack, onlinePack); TasksTab.IsChecked = true; return task;
     }
     private PackSearchFilter ReadFilter() => new(PackQuery.Text.Trim(), VersionFilter.Value(PackGameVersion.Text), CatalogPlatform,
         PackLoader.SelectedIndex <= 0 ? null : PackLoader.SelectedIndex switch { 1 => LoaderKind.Forge, 2 => LoaderKind.Fabric, _ => LoaderKind.NeoForge }, (PackSort)PackSortBox.SelectedIndex);
@@ -274,7 +297,8 @@ public partial class DownloadCenter : UserControl
         if (PackResults.SelectedItem is not PackSearchCard card) { SetCatalogStatus("请先选择一个" + CatalogLabel + "。"); return; }
         if (contentKind is not null) { OpenContent(card.Project); return; }
         var project = card.Project;
-        var dialog = new PackReleaseWindow(OwnerWindow, project, appliedFilter, DownloadAvailability.Snapshot(settings()), service, (request, snapshot, pack) => Enqueue(request, snapshot, pack));
+        var dialog = new PackReleaseWindow(OwnerWindow, project, appliedFilter, DownloadAvailability.Snapshot(settings()), service,
+            (request, snapshot, release) => Enqueue(request, snapshot, onlinePack: release));
         dialog.ShowDialog();
     }
     private void OpenPackRow(object sender, MouseButtonEventArgs e)

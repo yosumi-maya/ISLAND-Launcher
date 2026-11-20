@@ -57,6 +57,7 @@ internal static class SelectionContinueUiTests
             void Select(string id) => list.SelectedItem = list.Items.Cast<InstanceCard>().Single(card => card.Id == id);
             async Task<string> Continue()
             {
+                await Program.WaitUntil(() => next.IsEnabled, "Continue did not become available after loading the save");
                 log.Clear(); next.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 var deadline = DateTime.UtcNow.AddSeconds(30);
                 while ((!log.Text.Contains("游戏已退出") || !launch.IsEnabled) && DateTime.UtcNow < deadline) await Task.Delay(50);
@@ -64,6 +65,7 @@ internal static class SelectionContinueUiTests
                 return log.Text;
             }
             Select("Alpha");
+            await Program.WaitUntil(() => next.IsEnabled, "The latest world did not finish loading");
             check(((TextBlock)window.FindName("RecentInstanceName")).Text == "Alpha" && ((TextBlock)window.FindName("RecentWorldName")).Text == "最新世界", "Hero follows selection and chooses the latest valid world");
             var output = await Continue();
             check(output.Contains("DIR=" + alpha) && output.Contains("ARG=Latest Save") && !output.Contains("ARG=Old Save"), "Continue launches the selected instance with its latest world in Quick Play");
@@ -71,7 +73,9 @@ internal static class SelectionContinueUiTests
             check(output.Contains("DIR=" + Path.Combine(gameRoot, "versions", "Beta")) && !output.Contains("ARG=--quickPlaySingleplayer") && output.Contains("HAS_AGENT=false"), "A selected instance without saves starts normally and never inherits the previous save");
             Select("Legacy"); output = await Continue();
             check(output.Contains("HAS_AGENT=true"), "Continue installs the legacy helper for an existing old-version save");
-            Select("Alpha"); Directory.Delete(Path.Combine(alpha, "saves", "Latest Save"), true); output = await Continue();
+            Select("Alpha");
+            await Program.WaitUntil(() => next.IsEnabled, "The save to delete did not finish loading");
+            Directory.Delete(Path.Combine(alpha, "saves", "Latest Save"), true); output = await Continue();
             check(!output.Contains("ARG=--quickPlaySingleplayer") && !output.Contains("ARG=Old Save"), "A save deleted after selection falls back to normal startup without opening a different world");
             window.UpdateLayout(); capture(window, "Selection-Continue-Library");
         }

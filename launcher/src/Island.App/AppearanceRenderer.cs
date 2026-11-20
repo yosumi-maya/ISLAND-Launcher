@@ -337,17 +337,23 @@ public sealed class MaterialBorder : Border
             ApplyForeground(style);
             SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "Ink"); return;
         }
-        var accent = (Color)ColorConverter.ConvertFromString(RenderContext.ThemeColor);
+        var accent = ((SolidColorBrush)RenderContext.ThemeResources["Accent"]).Color;
+        var neutral = ((SolidColorBrush)RenderContext.ThemeResources["Focus"]).Color;
         var light = color.R * .299 + color.G * .587 + color.B * .114 > 145;
-        var ink = ThemeManager.Readable(light ? ThemeManager.Mix(accent, Colors.Black, .63) : Color.FromRgb(241, 245, 242), color);
+        var ink = ThemeManager.Readable(light ? Color.FromRgb(34, 53, 46) : Color.FromRgb(241, 245, 242), color);
         Resources["Ink"] = new SolidColorBrush(ink);
         Resources["Muted"] = new SolidColorBrush(ThemeManager.Readable(ThemeManager.Mix(ink, color, .35), color));
         Resources["AccentInk"] = new SolidColorBrush(ThemeManager.Readable(accent, ThemeManager.Mix(color, accent, .16)));
         Resources["Surface"] = new SolidColorBrush(ThemeManager.Mix(color, light ? Colors.White : Colors.Black, .12));
         Resources["AccentSoft"] = new SolidColorBrush(ThemeManager.Mix(color, accent, .16));
         Resources["AccentHover"] = new SolidColorBrush(ThemeManager.Mix(color, accent, .24));
-        Resources["Focus"] = Resources["SelectionBorder"] = new SolidColorBrush(ThemeManager.Readable(accent, color, 3));
-        Resources["SelectionBackground"] = new SolidColorBrush(ThemeManager.Mix(color, accent, .16));
+        var accentSelection = ThemeManager.Mix(color, accent, .16);
+        Resources["AccentSelection"] = new SolidColorBrush(accentSelection);
+        Resources["AccentSelectionInk"] = new SolidColorBrush(ThemeManager.Readable(accent, accentSelection));
+        Resources["Focus"] = Resources["SelectionBorder"] = new SolidColorBrush(ThemeManager.Readable(neutral, color, 3));
+        Resources["SelectionBackground"] = new SolidColorBrush(ThemeManager.Mix(color, neutral, .12));
+        Resources["HoverBackground"] = new SolidColorBrush(ThemeManager.Mix(color, neutral, .20));
+        Resources["StatusAccent"] = new SolidColorBrush(ThemeManager.Readable(neutral, color));
         if (style.Color.Length > 0)
         {
             Resources["HeroText"] = new SolidColorBrush(ink); Resources["HeroMuted"] = new SolidColorBrush(ThemeManager.Mix(ink, color, .3));

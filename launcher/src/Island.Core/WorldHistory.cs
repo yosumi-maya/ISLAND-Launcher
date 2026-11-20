@@ -10,7 +10,7 @@ public sealed record SavedWorld(string Name, string FolderName, DateTimeOffset L
 
 public static class WorldHistory
 {
-    public static SavedWorld? FindLatest(string instanceDirectory)
+    public static SavedWorld? FindLatest(string instanceDirectory, CancellationToken token = default)
     {
         try
         {
@@ -19,6 +19,7 @@ public static class WorldHistory
             SavedWorld? latest = null;
             foreach (var directory in Directory.EnumerateDirectories(saves))
             {
+                token.ThrowIfCancellationRequested();
                 try
                 {
                     var folder = Path.GetFileName(directory);

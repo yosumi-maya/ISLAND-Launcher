@@ -22,20 +22,30 @@ public static class DownloadAvailability
 public interface ILauncherDownloads
 {
     Task<IReadOnlyList<GameVersion>> GetGamesAsync(AppSettings settings, CancellationToken token);
+    Task<IReadOnlyList<GameVersion>> RefreshGamesAsync(AppSettings settings, CancellationToken token) => GetGamesAsync(settings, token);
     Task<IReadOnlyList<LoaderVersion>> GetLoadersAsync(AppSettings settings, LoaderKind loader, string version, CancellationToken token);
     Task<CatalogSearchPage> SearchAsync(AppSettings settings, PackSearchFilter filter, int page, CancellationToken token);
     Task<CatalogVersionPage> GetReleasesAsync(AppSettings settings, CatalogProject project, PackSearchFilter filter, CancellationToken token);
-    Task<PackInfo> PrepareAsync(AppSettings settings, CatalogProject project, CatalogVersion release, CancellationToken token);
+    Task<PackInfo> PrepareAsync(AppSettings settings, CatalogProject project, CatalogVersion release, CancellationToken token, IProgress<InstallProgress>? progress = null);
     Task<PackInfo> InspectAsync(string file, CancellationToken token);
     Task<string> InstallAsync(AppSettings settings, InstallRequest request, PackInfo? pack, IProgress<InstallProgress> progress, CancellationToken token);
 }
 
-public sealed class LauncherDownloads(Func<AppSettings, DownloadClient>? networkFactory = null) : ILauncherDownloads
+public sealed class LauncherDownloads(Func<AppSettings, DownloadClient>? networkFactory = null, string? cacheDirectory = null) : ILauncherDownloads
 {
+    private readonly GameVersionCache gameVersions = new(cacheDirectory);
     private DownloadClient Network(AppSettings settings) => networkFactory?.Invoke(settings) ?? new(settings);
-    public async Task<IReadOnlyList<GameVersion>> GetGamesAsync(AppSettings settings, CancellationToken token)
+
+    public Task<IReadOnlyList<GameVersion>> GetGamesAsync(AppSettings settings, CancellationToken token)
+        => gameVersions.GetAsync(ct => FetchGamesAsync(settings, ct), token);
+
+    public Task<IReadOnlyList<GameVersion>> RefreshGamesAsync(AppSettings settings, CancellationToken token)
+        => gameVersions.GetAsync(ct => FetchGamesAsync(settings, ct), token, refresh: true);
+
+    private async Task<IReadOnlyList<GameVersion>> FetchGamesAsync(AppSettings settings, CancellationToken token)
     {
-        using var network = Network(settings); return await new MinecraftInstaller(settings, network).GetVersionsAsync(token);
+        using var network = Network(settings);
+        return await new MinecraftInstaller(settings, network).GetVersionsAsync(token);
     }
     public async Task<IReadOnlyList<LoaderVersion>> GetLoadersAsync(AppSettings settings, LoaderKind loader, string version, CancellationToken token)
     {
@@ -60,11 +70,13 @@ public sealed class LauncherDownloads(Func<AppSettings, DownloadClient>? network
         }
         return new(versions.DistinctBy(version => version.Id).ToArray(), null);
     }
-    public async Task<PackInfo> PrepareAsync(AppSettings settings, CatalogProject project, CatalogVersion release, CancellationToken token)
+    public async Task<PackInfo> PrepareAsync(AppSettings settings, CatalogProject project, CatalogVersion release, CancellationToken token, IProgress<InstallProgress>? progress = null)
     {
         settings = DownloadAvailability.Snapshot(settings);
         using var network = Network(settings);
-        var path = await new ModpackCatalog(settings, network).DownloadArchiveAsync(project, release, SafePaths.Under(settings.GameDirectory, ".blockdock/packdownloads"), token);
+        progress?.Report(new("下载整合包文件", release.Name));
+        var path = await new ModpackCatalog(settings, network).DownloadArchiveAsync(project, release, SafePaths.Under(settings.GameDirectory, ".blockdock/packdownloads"), token, progress);
+        progress?.Report(new("识别整合包清单", release.Name));
         var pack = await InspectAsync(path, token); pack.IconUrl = project.IconUrl; return pack;
     }
     public async Task<PackInfo> InspectAsync(string file, CancellationToken token)
@@ -74,7 +86,8 @@ public sealed class LauncherDownloads(Func<AppSettings, DownloadClient>? network
     public async Task<string> InstallAsync(AppSettings settings, InstallRequest request, PackInfo? pack, IProgress<InstallProgress> progress, CancellationToken token)
     {
         DownloadAvailability.RequireSupported(pack, settings); settings = DownloadAvailability.Snapshot(settings);
+        var versions = await gameVersions.GetAsync(ct => FetchGamesAsync(settings, ct), token, requiredVersion: request.MinecraftVersion);
         using var network = Network(settings);
-        return await Task.Run(() => new MinecraftInstaller(settings, network).InstallAsync(request, progress, token, pack), token);
+        return await Task.Run(() => new MinecraftInstaller(settings, network, versions).InstallAsync(request, progress, token, pack), token);
     }
 }

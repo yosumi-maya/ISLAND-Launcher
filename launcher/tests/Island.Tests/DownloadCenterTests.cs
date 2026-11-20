@@ -32,7 +32,7 @@ internal static class DownloadCenterTests
         var version = new JsonObject { ["id"] = "1.20.1", ["mainClass"] = "Fixture", ["downloads"] = new JsonObject { ["client"] = Artifact("https://fixture.invalid/client", payload) }, ["libraries"] = new JsonArray(), ["assetIndex"] = Artifact("https://fixture.invalid/index", index) };
         version["assetIndex"]!["id"] = "fixture";
         var versionBytes = Encoding.UTF8.GetBytes(version.ToJsonString());
-        var manifest = new JsonObject { ["versions"] = new JsonArray(new JsonObject { ["id"] = "1.20.1", ["type"] = "release", ["url"] = "https://fixture.invalid/version", ["sha1"] = Convert.ToHexString(SHA1.HashData(versionBytes)), ["releaseTime"] = "2023-06-12T00:00:00Z" }) };
+        var manifest = new JsonObject { ["versions"] = new JsonArray(new JsonObject { ["id"] = "1.20.1", ["type"] = "release", ["url"] = "https://piston-meta.mojang.com/v1/packages/fixture/1.20.1.json", ["sha1"] = Convert.ToHexString(SHA1.HashData(versionBytes)), ["releaseTime"] = "2023-06-12T00:00:00Z" }) };
         byte[] PackBytes(bool curseForge)
         {
             using var memory = new MemoryStream();
@@ -52,20 +52,27 @@ internal static class DownloadCenterTests
         };
         var content = new Dictionary<string, byte[]>
         {
-            [MinecraftInstaller.ManifestUrl] = Encoding.UTF8.GetBytes(manifest.ToJsonString()), ["https://fixture.invalid/version"] = versionBytes,
+            [MinecraftInstaller.ManifestUrl] = Encoding.UTF8.GetBytes(manifest.ToJsonString()), ["https://piston-meta.mojang.com/v1/packages/fixture/1.20.1.json"] = versionBytes,
             ["https://fixture.invalid/client"] = payload, ["https://fixture.invalid/index"] = index, ["https://cdn.modrinth.com/fixture.mrpack"] = packBytes
         };
         var requests = new ConcurrentBag<string>(); var keySent = false;
-        var service = new LauncherDownloads(options => new DownloadClient(options, new Handler(request =>
+        var cacheDirectory = Path.Combine(directory, "launcher-data");
+        var cachePath = Path.Combine(cacheDirectory, "minecraft-versions.json");
+        LauncherDownloads NewService() => new(options => new DownloadClient(options, new Handler(request =>
         {
             var url = request.RequestUri!; requests.Add(url.AbsoluteUri); keySent |= request.Headers.Contains("x-api-key");
             if (url.Host == "api.modrinth.com" && url.AbsolutePath == "/v2/search") return new(HttpStatusCode.OK) { Content = new StringContent("""{"total_hits":41,"hits":[{"project_id":"fixture","slug":"fixture","title":"Fixture Pack","description":"A fixture","downloads":123,"versions":["1.20.1"],"categories":["fabric"]}]}""") };
             if (url.AbsolutePath == "/v2/project/fixture/version") return new(HttpStatusCode.OK) { Content = new StringContent(new JsonArray(release.DeepClone()).ToJsonString()) };
             if (content.TryGetValue(url.AbsoluteUri, out var bytes)) return new(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) };
             throw new Exception("Unexpected download destination: " + url);
-        })));
+        })), cacheDirectory);
+        var service = NewService();
         var games = await service.GetGamesAsync(snapshot, default);
         check(games.Single().Id == "1.20.1", "Integrated downloader reads the official game manifest through the existing installer");
+        service = NewService();
+        check((await service.GetGamesAsync(snapshot, default)).SequenceEqual(games) && File.Exists(cachePath)
+            && requests.Count(url => url == MinecraftInstaller.ManifestUrl) == 1,
+            "Restarted download services reuse the saved vanilla version list without another manifest request");
         var filter = new PackSearchFilter("fixture", "1.20.1", PackPlatform.Modrinth, LoaderKind.Fabric, PackSort.Downloads);
         var page = await service.SearchAsync(snapshot, filter, 2, default);
         check(page.Projects.Single().Platform == PackPlatform.Modrinth && page.Page == 2 && !page.HasNext && page.Total == 41
@@ -78,6 +85,23 @@ internal static class DownloadCenterTests
         check(File.ReadAllBytes(Path.Combine(target, "Integrated game.jar")).SequenceEqual(payload) && File.Exists(Path.Combine(target, "Integrated game.json")), "Integrated worker completes an actual miniature game installation and atomic instance commit");
         var packed = await service.InstallAsync(snapshot, new("1.20.1", "Integrated pack"), pack, new Progress<InstallProgress>(), default);
         check(File.ReadAllText(Path.Combine(packed, "config", "island.txt")) == "owned-fixture", "Integrated worker applies local pack overrides into the installed instance");
+        check(requests.Count(url => url == MinecraftInstaller.ManifestUrl) == 1,
+            "Installing a known version reuses the cached list while still downloading version files");
+
+        content[MinecraftInstaller.ManifestUrl] = "{\"versions\":[]}"u8.ToArray();
+        var emptyRejected = false;
+        try { await service.RefreshGamesAsync(snapshot, default); }
+        catch (InvalidDataException) { emptyRejected = true; }
+        check(emptyRejected && (await NewService().GetGamesAsync(snapshot, default)).SequenceEqual(games),
+            "An invalid manual refresh leaves the last successful on-disk version list intact");
+        manifest["versions"]!.AsArray().Insert(0, new JsonObject
+        {
+            ["id"] = "1.21", ["type"] = "release", ["url"] = "https://piston-meta.mojang.com/v1/packages/fixture/1.21.json"
+        });
+        content[MinecraftInstaller.ManifestUrl] = Encoding.UTF8.GetBytes(manifest.ToJsonString());
+        var refreshed = await service.RefreshGamesAsync(snapshot, default);
+        check(refreshed[0].Id == "1.21" && (await NewService().GetGamesAsync(snapshot, default)).SequenceEqual(refreshed),
+            "Manual refresh atomically replaces the list and the next launcher reads the updated version");
         var cfProject = project with { Platform = PackPlatform.CurseForge }; var before = requests.Count;
         snapshot.CurseForgeApiKey = "";
         var mixed = await service.SearchAsync(snapshot, filter with { Platform = PackPlatform.All }, 0, default);

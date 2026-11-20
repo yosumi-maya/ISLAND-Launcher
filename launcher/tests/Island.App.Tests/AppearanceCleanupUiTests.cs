@@ -32,7 +32,7 @@ internal static class AppearanceCleanupUiTests
             var chooser=new InstanceIconWindow(window,"quilt",null){Left=-16000,Top=0,WindowStartupLocation=WindowStartupLocation.Manual};chooser.Show();chooser.UpdateLayout();
             var list=Children<ListBox>(chooser).Single();var item=list.Items.OfType<ListBoxItem>().Single(i=>i.Tag as string=="quilt");item.Focus();chooser.UpdateLayout();
             var border=(Border)item.Template.FindName("B",item);
-            check(border.BorderThickness.Left==1 && ((SolidColorBrush)border.Background).Color==((SolidColorBrush)chooser.FindResource("AccentSoft")).Color,"Icon selection uses a filled background without a thick selection frame");capture(chooser,"Appearance-Cleanup-Icon-Selection");chooser.Close();
+            check(border.BorderThickness.Left==1 && ((SolidColorBrush)border.Background).Color==((SolidColorBrush)chooser.FindResource("SelectionBackground")).Color,"Icon selection uses a filled background without a thick selection frame");capture(chooser,"Appearance-Cleanup-Icon-Selection");chooser.Close();
             Find<Button>("OpenAppearanceButton").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));window.UpdateLayout();
             var preview=(AppearancePreview)Find<ContentControl>("AppearancePreviewHost").Content;preview.Highlight(SurfaceArea.Hero);
             check(Children<Button>(preview).Where(b=>b.Name.StartsWith("Preview")).All(b=>b.BorderThickness.Left==0),"Custom appearance preview does not add a selected-region outline");capture(window,"Appearance-Cleanup-Preview");

@@ -135,9 +135,9 @@ public sealed class ContentDownloads(Func<AppSettings, DownloadClient>? networkF
         if (!GameFolder.SamePath(resolved, target.RuntimeDirectory)) throw new IOException("目标实例目录已改变，请重新选择。");
         _ = SafePaths.Under(target.RuntimeDirectory, ".island/content.json");
     }
-    private static List<ContentFile> ReadInstalled(ContentTarget target)
+    internal static List<ContentFile> ReadInstalled(string runtimeDirectory)
     {
-        var path = SafePaths.Under(target.RuntimeDirectory, ".island/content.json");
+        var path = SafePaths.Under(runtimeDirectory, ".island/content.json");
         if (!File.Exists(path)) return [];
         if (new FileInfo(path).Length > 1024 * 1024) throw new InvalidDataException("资源安装记录过大。");
         try { return JsonSerializer.Deserialize<List<ContentFile>>(File.ReadAllText(path)) ?? []; }
@@ -174,7 +174,7 @@ public sealed class ContentDownloads(Func<AppSettings, DownloadClient>? networkF
             return await cf.PrepareAsync(project, version, filter, target, token);
         }
         using var network = Network(settings);
-        var installed = ReadInstalled(target);
+        var installed = ReadInstalled(target.RuntimeDirectory);
         var files = new List<ContentFile>(); var selected = new Dictionary<string, string>(StringComparer.Ordinal); var incompatible = new List<ContentConflict>();
         async Task Resolve(string projectId, string versionId, ContentKind kind)
         {
@@ -238,7 +238,7 @@ public sealed class ContentDownloads(Func<AppSettings, DownloadClient>? networkF
         if (requested.Count == 0) throw new InvalidDataException("安装清单没有本次要安装的资源。");
         var statePath = SafePaths.Under(plan.Target.RuntimeDirectory, ".island/content.json"); Directory.CreateDirectory(Path.GetDirectoryName(statePath)!);
         await using var guard = new FileStream(SafePaths.Under(plan.Target.RuntimeDirectory, ".island/content-install.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-        var installed = ReadInstalled(plan.Target); CheckInstalled(plan.Target, requested, installed);
+        var installed = ReadInstalled(plan.Target.RuntimeDirectory); CheckInstalled(plan.Target, requested, installed);
         CheckIncompatible(plan.Target, requested, installed, requested.SelectMany(file => file.Incompatibilities));
         var inspection = await ContentInstallationInspector.InspectAsync(plan, token);
         var older = inspection.FirstOrDefault(match => match.Enabled && match.Kind == ContentMatchKind.ManagedOtherVersion && requested.Any(file => file.ProjectId == match.ProjectId));

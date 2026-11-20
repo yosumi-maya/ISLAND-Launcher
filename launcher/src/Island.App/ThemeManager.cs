@@ -30,21 +30,28 @@ public static class ThemeManager
         if (dark && Contrast(accent, surface) < 2) accent = Mix(accent, Colors.White, .45);
         var ink = Hex(dark ? "#EDF4F1" : "#22352E");
         var muted = Hex(dark ? "#B0C2BC" : "#52645C");
+        var panel = Hex(dark ? "#192A2E" : "#F3F4F6");
+        var neutralSelection = Hex(dark ? "#293B40" : "#ECF3F1");
+        var neutralFocus = Hex(dark ? "#82A49A" : "#718F85");
+        var neutralHover = Hex(dark ? "#31434A" : "#E6EAEC");
         var soft = dark ? Mix(surface, accent, .18) : Mix(accent, Colors.White, .91);
         var hover = dark ? Mix(surface, accent, .26) : Mix(accent, Colors.White, .85);
         var primaryHover = Mix(accent, dark ? Colors.White : Colors.Black, .09);
         var primaryPressed = Mix(accent, dark ? Colors.White : Colors.Black, .16);
         var onAccent = Contrast(Colors.White, accent) > Contrast(Colors.Black, accent) ? Colors.White : Colors.Black;
+        var accentSelection = Mix(panel, accent, .16);
         var hero = soft;
         var heroSurface = surface;
         var colors = new Dictionary<string, Color>
         {
             ["Accent"] = accent, ["OnAccent"] = onAccent, ["AccentInk"] = Readable(accent, soft),
             ["Ink"] = ink, ["Muted"] = muted, ["DangerInk"] = Readable(Hex(dark ? "#FF9B94" : "#B42318"), surface), ["Line"] = Hex(dark ? "#3A5055" : "#D3DFD8"),
-            ["WindowBackground"] = Hex(dark ? "#142227" : "#F3F6F4"), ["SidebarBackground"] = Hex(dark ? "#192A2E" : "#E7EEEA"),
+            ["WindowBackground"] = Hex(dark ? "#142227" : "#FFFFFF"), ["SidebarBackground"] = panel, ["ContentBackground"] = panel,
             ["Surface"] = surface, ["AccentSoft"] = soft, ["AccentHover"] = hover,
-            ["SelectionBackground"] = soft, ["SelectionBorder"] = Readable(accent, surface, 3),
-            ["Focus"] = Readable(accent, surface, 3), ["SelectionFill"] = Mix(accent, surface, .55),
+            ["AccentSelection"] = accentSelection, ["AccentSelectionInk"] = Readable(accent, accentSelection),
+            ["SelectionBackground"] = neutralSelection, ["HoverBackground"] = neutralHover,
+            ["SelectionBorder"] = neutralFocus, ["Focus"] = neutralFocus, ["SelectionFill"] = Mix(neutralFocus, surface, .55),
+            ["StatusAccent"] = Readable(Hex(dark ? "#87C8B4" : AppearanceSettings.DefaultColor), panel),
             ["PrimaryHover"] = primaryHover, ["PrimaryPressed"] = primaryPressed,
             ["OnPrimaryHover"] = Readable(onAccent, primaryHover), ["OnPrimaryPressed"] = Readable(onAccent, primaryPressed),
             ["NoticeBackground"] = Hex(dark ? "#243A40" : "#E8F0ED"), ["NoticeInk"] = Hex(dark ? "#C5DDD3" : "#3B594E"),

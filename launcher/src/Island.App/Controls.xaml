@@ -9,7 +9,7 @@
    <Border x:Name="ThumbBody" Background="{TemplateBinding Background}" CornerRadius="4" Margin="2"/>
    <ControlTemplate.Triggers>
     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ThumbBody" Property="Background" Value="{DynamicResource ScrollHover}"/></Trigger>
-    <Trigger Property="IsDragging" Value="True"><Setter TargetName="ThumbBody" Property="Background" Value="{DynamicResource Accent}"/></Trigger>
+    <Trigger Property="IsDragging" Value="True"><Setter TargetName="ThumbBody" Property="Background" Value="{DynamicResource StatusAccent}"/></Trigger>
    </ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
@@ -45,8 +45,8 @@
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBoxItem">
    <Border x:Name="ItemBody" Background="Transparent" CornerRadius="6" Padding="{TemplateBinding Padding}"><ContentPresenter VerticalAlignment="Center" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" RecognizesAccessKey="True"/></Border>
    <ControlTemplate.Triggers>
-    <Trigger Property="IsSelected" Value="True"><Setter TargetName="ItemBody" Property="Background" Value="{DynamicResource AccentSoft}"/><Setter Property="Foreground" Value="{DynamicResource AccentInk}"/></Trigger>
-    <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="ItemBody" Property="Background" Value="{DynamicResource AccentHover}"/><Setter Property="Foreground" Value="{DynamicResource AccentInk}"/></Trigger>
+    <Trigger Property="IsSelected" Value="True"><Setter TargetName="ItemBody" Property="Background" Value="{DynamicResource SelectionBackground}"/><Setter Property="Foreground" Value="{DynamicResource Ink}"/></Trigger>
+    <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="ItemBody" Property="Background" Value="{DynamicResource HoverBackground}"/><Setter Property="Foreground" Value="{DynamicResource Ink}"/></Trigger>
     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4"/></Trigger>
    </ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
@@ -106,11 +106,11 @@
   </ControlTemplate></Setter.Value></Setter>
  </Style>
  <Style TargetType="GridViewColumnHeader">
-  <Setter Property="Background" Value="{DynamicResource AccentHover}"/><Setter Property="Foreground" Value="{DynamicResource Muted}"/><Setter Property="Padding" Value="6,10"/><Setter Property="FontSize" Value="11"/><Setter Property="HorizontalContentAlignment" Value="Left"/><Setter Property="BorderThickness" Value="0"/>
+  <Setter Property="Background" Value="{DynamicResource HoverBackground}"/><Setter Property="Foreground" Value="{DynamicResource Muted}"/><Setter Property="Padding" Value="6,10"/><Setter Property="FontSize" Value="11"/><Setter Property="HorizontalContentAlignment" Value="Left"/><Setter Property="BorderThickness" Value="0"/>
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="GridViewColumnHeader"><Grid>
    <Border x:Name="HeaderBody" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1"><ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" RecognizesAccessKey="True"/></Border>
    <Thumb x:Name="PART_HeaderGripper" HorizontalAlignment="Right" Width="5" Cursor="SizeWE"><Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="Transparent"/></ControlTemplate></Thumb.Template></Thumb>
-   </Grid><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="HeaderBody" Property="Background" Value="{DynamicResource AccentSoft}"/></Trigger><Trigger Property="Role" Value="Padding"><Setter TargetName="PART_HeaderGripper" Property="Visibility" Value="Collapsed"/></Trigger></ControlTemplate.Triggers>
+   </Grid><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="HeaderBody" Property="Background" Value="{DynamicResource SelectionBackground}"/></Trigger><Trigger Property="Role" Value="Padding"><Setter TargetName="PART_HeaderGripper" Property="Visibility" Value="Collapsed"/></Trigger></ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
  <Style TargetType="ListView">
@@ -120,10 +120,10 @@
  <Style TargetType="ListViewItem">
   <Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="0"/><Setter Property="MinHeight" Value="39"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/>
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListViewItem">
-   <Border x:Name="RowBody" Background="Transparent" BorderBrush="{DynamicResource AccentHover}" BorderThickness="0,0,0,1" Padding="0,10"><GridViewRowPresenter Content="{TemplateBinding Content}" Columns="{Binding View.Columns, RelativeSource={RelativeSource AncestorType=ListView}}" VerticalAlignment="Center"/></Border>
+   <Border x:Name="RowBody" Background="Transparent" BorderBrush="{DynamicResource HoverBackground}" BorderThickness="0,0,0,1" Padding="0,10"><GridViewRowPresenter Content="{TemplateBinding Content}" Columns="{Binding View.Columns, RelativeSource={RelativeSource AncestorType=ListView}}" VerticalAlignment="Center"/></Border>
    <ControlTemplate.Triggers>
-    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="RowBody" Property="Background" Value="{DynamicResource AccentHover}"/></Trigger>
-    <Trigger Property="IsSelected" Value="True"><Setter TargetName="RowBody" Property="Background" Value="{DynamicResource AccentSoft}"/><Setter Property="Foreground" Value="{DynamicResource AccentInk}"/></Trigger>
+    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="RowBody" Property="Background" Value="{DynamicResource HoverBackground}"/></Trigger>
+    <Trigger Property="IsSelected" Value="True"><Setter TargetName="RowBody" Property="Background" Value="{DynamicResource SelectionBackground}"/><Setter Property="Foreground" Value="{DynamicResource Ink}"/></Trigger>
 
    </ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
@@ -136,7 +136,7 @@
   <Setter Property="Padding" Value="11,8"/><Setter Property="Foreground" Value="{DynamicResource Ink}"/>
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="MenuItem">
    <Border x:Name="MenuBody" Background="Transparent" Padding="{TemplateBinding Padding}" CornerRadius="5"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><ContentPresenter ContentSource="Header" RecognizesAccessKey="True"/><TextBlock Grid.Column="1" Text="{TemplateBinding InputGestureText}" Foreground="{DynamicResource Muted}" Margin="22,0,0,0" FontSize="11" VerticalAlignment="Center"/></Grid></Border>
-   <ControlTemplate.Triggers><Trigger Property="IsHighlighted" Value="True"><Setter TargetName="MenuBody" Property="Background" Value="{DynamicResource AccentSoft}"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4"/></Trigger></ControlTemplate.Triggers>
+   <ControlTemplate.Triggers><Trigger Property="IsHighlighted" Value="True"><Setter TargetName="MenuBody" Property="Background" Value="{DynamicResource SelectionBackground}"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4"/></Trigger></ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
  <Style TargetType="Separator"><Setter Property="HorizontalAlignment" Value="Stretch"/><Setter Property="Margin" Value="5,4"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Separator"><Border Height="1" Background="{DynamicResource Line}"/></ControlTemplate></Setter.Value></Setter></Style>
@@ -154,7 +154,7 @@
   <MenuItem Header="全选" Command="ApplicationCommands.SelectAll" InputGestureText="Ctrl+A" CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
  </ContextMenu>
  <Style TargetType="ProgressBar">
-  <Setter Property="Foreground" Value="{DynamicResource Accent}"/><Setter Property="Background" Value="{DynamicResource AccentSoft}"/><Setter Property="BorderThickness" Value="0"/>
+  <Setter Property="Foreground" Value="{DynamicResource StatusAccent}"/><Setter Property="Background" Value="{DynamicResource SelectionBackground}"/><Setter Property="BorderThickness" Value="0"/>
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ProgressBar">
    <Grid x:Name="PART_Track" ClipToBounds="True"><Border Background="{TemplateBinding Background}" CornerRadius="3"/><Border x:Name="PART_Indicator" Background="{TemplateBinding Foreground}" CornerRadius="3" HorizontalAlignment="Left"/><Border x:Name="Pulse" Background="{TemplateBinding Foreground}" CornerRadius="3" Visibility="Collapsed"/></Grid>
    <ControlTemplate.Triggers><Trigger Property="IsIndeterminate" Value="True"><Setter TargetName="PART_Indicator" Property="Visibility" Value="Collapsed"/><Setter TargetName="Pulse" Property="Visibility" Value="Visible"/><Trigger.EnterActions><BeginStoryboard x:Name="PulseAnimation"><Storyboard><DoubleAnimation Storyboard.TargetName="Pulse" Storyboard.TargetProperty="Opacity" From="0.22" To="0.8" Duration="0:0:1.1" AutoReverse="True" RepeatBehavior="Forever"/></Storyboard></BeginStoryboard></Trigger.EnterActions><Trigger.ExitActions><RemoveStoryboard BeginStoryboardName="PulseAnimation"/></Trigger.ExitActions></Trigger></ControlTemplate.Triggers>

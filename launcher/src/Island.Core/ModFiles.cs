@@ -20,12 +20,21 @@ public static class ModFiles
     }
     public static void Toggle(string instance, ModFile mod)
     {
-        var folder = SafePaths.Under(instance, "mods");
-        var path = SafePaths.Under(folder, Path.GetFileName(mod.Path));
-        if (!string.Equals(Path.GetFullPath(mod.Path), path, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("模组路径超出实例目录。");
+        var path = ExistingPath(instance, mod);
         var target = mod.Enabled ? path + ".disabled" : path[..^9];
         File.Move(path, target); // Refuse to overwrite another copy.
     }
+    public static string ExistingPath(string instance, ModFile mod)
+    {
+        var folder = SafePaths.Under(instance, "mods");
+        var path = SafePaths.Under(folder, Path.GetFileName(mod.Path));
+        var extension = mod.Enabled ? ".jar" : ".jar.disabled";
+        if (!string.Equals(Path.GetFullPath(mod.Path), path, StringComparison.OrdinalIgnoreCase) || !path.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("模组路径不在实例的 mods 目录内，或文件类型无效。");
+        if (!File.Exists(path)) throw new FileNotFoundException("模组文件已不存在。", path);
+        return path;
+    }
+
     public static void Add(string instance, IEnumerable<string> paths)
     {
         var folder = SafePaths.Under(instance, "mods"); Directory.CreateDirectory(folder);

@@ -28,7 +28,7 @@ public partial class MainWindow
                 if (operation is null && game is null) StatusLabel.Text = "●  已安装：" + task.Name;
             }
             catch (Exception ex) { Log("下载已完成，刷新实例列表失败：" + ex.Message); }
-        }, service, queue, () => operation is null && game is null, contentService,
+        }, service ?? new LauncherDownloads(cacheDirectory: store.DirectoryPath), queue, () => operation is null && game is null, contentService,
             () => cards.Select(card => new ContentTarget(card.GameDirectory, card.Id,
                 card.DisplayName + " · " + card.FolderName, card.Instance.Minecraft, card.Instance.Loader, card.RuntimeDirectory, card.Isolation)).ToArray(),
             () => Selected?.Key);

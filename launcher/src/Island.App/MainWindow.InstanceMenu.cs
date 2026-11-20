@@ -39,7 +39,7 @@ public partial class MainWindow
         var mods = Add("Mod 管理", card =>
         {
             if (operation is not null || game is not null) return;
-            new ModManagerWindow(this, card).ShowDialog();
+            OpenModManagement(card);
         });
         menu.Items.Add(new Separator());
         foreach (var (label, relative) in new[] { ("游戏目录", ""), ("存档", "saves"), ("资源包", "resourcepacks"), ("光影", "shaderpacks") })
@@ -65,7 +65,7 @@ public partial class MainWindow
     private void OpenInstanceManagement(InstanceCard card)
     {
         if (operation is not null || game is not null) return;
-        new InstanceWindow(this, card, state, () => store.Save(state)).ShowDialog();
-        ReloadLibrary();
+        var page = new InstancePage(this, card, state, () => store.Save(state), () => OpenModManagement(card, fromInstance: true));
+        NavLibrary.IsChecked = true; ClearManagement(); ShowManagement(page);
     }
 }

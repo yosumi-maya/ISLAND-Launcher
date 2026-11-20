@@ -29,13 +29,14 @@ public sealed class AppearancePreview : Grid
         Background = CheckerboardBackground();
         var root = Surface(SurfaceArea.Window, "WindowBackground", 0, 0, 920, 370); root.IsPreviewRoot = true; root.CornerRadius = new CornerRadius(8);
         var scene = new Canvas { Width = 920, Height = 370 }; root.Child = scene; canvas.Children.Add(root);
-        var content = Surface(SurfaceArea.Content, "WindowBackground", 177, 14, 729, 342); scene.Children.Add(content);
+        var content = Surface(SurfaceArea.Content, "ContentBackground", 177, 14, 729, 342); scene.Children.Add(content);
         var contentBody = new Canvas { Width = 729, Height = 342 }; content.Child = contentBody;
         var side = Surface(SurfaceArea.Sidebar, "SidebarBackground", 14, 14, 154, 342);
         var sideContent = new StackPanel { Margin = new Thickness(18), Width = 118 };
         sideContent.Children.Add(Text("ISLAND", 22, true));
         sideContent.Children.Add(Text("Launcher", 11, false, "Muted", new Thickness(0, 3, 0, 32)));
-        sideContent.Children.Add(Text("⌂  我的实例", 15, true));
+        var selectedNav = new Border { CornerRadius = new CornerRadius(7), Padding = new Thickness(8, 6, 8, 6), Child = Text("⌂  我的实例", 13, true, "AccentSelectionInk") };
+        selectedNav.SetResourceReference(Border.BackgroundProperty, "AccentSelection"); sideContent.Children.Add(selectedNav);
         sideContent.Children.Add(Text("♙  玩家账号", 14, false, "Muted", new Thickness(0, 22, 0, 0)));
         sideContent.Children.Add(Text("⚙  启动器设置", 14, false, "Muted", new Thickness(0, 22, 0, 0)));
         var sidebarBody = new Canvas { Width = 154, Height = 342 }; side.Child = sidebarBody;
@@ -61,13 +62,20 @@ public sealed class AppearancePreview : Grid
         mapText.Children.Add(Text("上次游玩的地图", 11, false, "HeroMuted"));
         mapText.Children.Add(Text("林间小屋", 17, true, "HeroText", new Thickness(0, 8, 0, 0))); map.Child = mapText;
         heroCanvas.Children.Add(map); hero.Child = heroCanvas; contentBody.Children.Add(hero);
-        Add(contentBody, Text("☆ 收藏     默认目录", 12, true, "AccentInk"), 23, 140);
+        Add(contentBody, Text("☆ 收藏", 12, false, "Muted"), 23, 140);
+        var selectedFolder = new Border { CornerRadius = new CornerRadius(5), Padding = new Thickness(8, 3, 8, 3), Child = Text("默认目录", 12, true, "AccentSelectionInk") };
+        selectedFolder.SetResourceReference(Border.BackgroundProperty, "AccentSelection"); Add(contentBody, selectedFolder, 74, 137);
         Add(contentBody, Text("搜索世界…                    ＋ 添加实例", 11, false, "Muted"), 473, 140);
         for (int i = 0; i < 2; i++)
         {
-            var card = Surface(SurfaceArea.Instances, "Surface", 16 + i * 224, 166, 210, 96);
+            var card = Surface(SurfaceArea.Instances, i == 0 ? "AccentSoft" : "Surface", 16 + i * 224, 166, 210, 96);
             var body = new StackPanel { Margin = new Thickness(15, 10, 0, 0) };
-            body.Children.Add(Text(i == 0 ? "▣                         ☆" : "◆                         ☆", 16, false, "AccentInk"));
+            var icons = new Grid();
+            icons.Children.Add(Text(i == 0 ? "▣" : "◆", 16, false, "Muted"));
+            var star = Text(i == 0 ? "★" : "☆", 16, false, i == 0 ? "AccentInk" : "Muted");
+            var favorite = new Border { Child = star, CornerRadius = new CornerRadius(4), HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(4, 0, 4, 0), Margin = new Thickness(0, 0, 10, 0) };
+            if (i == 0) favorite.SetResourceReference(Border.BackgroundProperty, "AccentSoft");
+            icons.Children.Add(favorite); body.Children.Add(icons);
             body.Children.Add(Text(i == 0 ? "冒险世界" : "模组生存", 17, true, margin: new Thickness(0, 8, 0, 0)));
             body.Children.Add(Text(i == 0 ? "Minecraft · 原版" : "Minecraft · Fabric", 11, false, "Muted", new Thickness(0, 5, 0, 0))); card.Child = body; contentBody.Children.Add(card);
         }
@@ -75,13 +83,13 @@ public sealed class AppearancePreview : Grid
         var panelText = new StackPanel { Margin = new Thickness(16, 14, 0, 0) };
         panelText.Children.Add(Text("设置与账号卡片", 17, true));
         panelText.Children.Add(Text("界面设置、玩家信息等", 12, false, "Muted", new Thickness(0, 12, 0, 0))); panels.Child = panelText; contentBody.Children.Add(panels);
-        var footer = Surface(SurfaceArea.LaunchBar, "AccentSoft", 16, 278, 697, 46);
+        var footer = Surface(SurfaceArea.LaunchBar, "Surface", 16, 278, 697, 46);
         var launchText = new Grid { Margin = new Thickness(15, 8, 12, 8) }; launchText.Children.Add(Text("冒险世界", 14, true));
         var launch = new Border { CornerRadius = new CornerRadius(6), Width = 124, HorizontalAlignment = HorizontalAlignment.Right }; launch.SetResourceReference(Border.BackgroundProperty, "Accent");
         launch.Child = Text("▶  启动游戏", 13, true, "OnAccent"); ((TextBlock)launch.Child).HorizontalAlignment = HorizontalAlignment.Center;
         launchText.Children.Add(launch); footer.Child = launchText; contentBody.Children.Add(footer);
         var account = new Border { CornerRadius = new CornerRadius(7), Width = 126, Height = 43 };
-        account.SetResourceReference(Border.BackgroundProperty, "AccentSoft"); account.Child = Text("♙  Player", 13, true); ((TextBlock)account.Child).Margin = new Thickness(12, 0, 0, 0); Add(sidebarBody, account, 14, 282);
+        account.SetResourceReference(Border.BackgroundProperty, "SelectionBackground"); account.Child = Text("♙  Player", 13, true); ((TextBlock)account.Child).Margin = new Thickness(12, 0, 0, 0); Add(sidebarBody, account, 14, 282);
         Add(scene, Text("ISLAND LAUNCHER", 7, false, "Muted"), 14, 358);
         AddRegion(canvas, SurfaceArea.Window, 0, 0, 920, 370);
         AddRegion(canvas, SurfaceArea.Content, 177, 14, 729, 342);

@@ -32,7 +32,7 @@ public sealed class AccountSkinWindow : FormWindow
         DockPanel.SetDock(resetView, Dock.Right); viewTools.Children.Add(resetView);
         viewTools.Children.Add(new TextBlock { Text = "拖动旋转 · 滚轮缩放", Style = (Style)FindResource("Hint"), VerticalAlignment = VerticalAlignment.Center }); stage.Children.Add(viewTools);
         var scene = new Border { Child = stage, CornerRadius = new CornerRadius(12), Margin = new Thickness(0, 0, 20, 0), VerticalAlignment = VerticalAlignment.Top };
-        scene.SetResourceReference(Border.BackgroundProperty, "AccentSoft"); preview.Children.Add(scene);
+        scene.SetResourceReference(Border.BackgroundProperty, "SelectionBackground"); preview.Children.Add(scene);
         Grid.SetColumn(controls, 1); controls.VerticalAlignment = VerticalAlignment.Center; preview.Children.Add(controls); Body.Children.Add(preview);
         avatar.HorizontalAlignment = HorizontalAlignment.Left; controls.Children.Add(avatar);
         controls.Children.Add(new TextBlock { Text = "玩家模型", Margin = new Thickness(0, 0, 0, 8) });

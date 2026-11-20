@@ -9,6 +9,8 @@ public enum DownloadTaskState { Queued, Running, Pausing, Canceling, Paused, Fai
 public sealed record DownloadWork(string Name, string Subtitle, IReadOnlyList<string> TargetFiles,
     Func<AppSettings, IProgress<InstallProgress>, CancellationToken, Task<string>> Run, string? IconUrl = null);
 
+public sealed record PackReleaseDownload(CatalogProject Project, CatalogVersion Release);
+
 public sealed class DownloadTask : INotifyPropertyChanged
 {
     private sealed record PendingProgress(int Attempt, InstallProgress Progress);
@@ -16,15 +18,17 @@ public sealed class DownloadTask : INotifyPropertyChanged
     private int attempt;
     public event PropertyChangedEventHandler? PropertyChanged;
     public Guid Id { get; } = Guid.NewGuid();
-    public InstallRequest Request { get; }
+    public InstallRequest Request { get; private set; }
     public AppSettings Settings { get; }
-    public PackInfo? Pack { get; }
+    public PackInfo? Pack { get; private set; }
+    public PackReleaseDownload? OnlinePack { get; }
     public DownloadWork? Work { get; }
     public string TargetDirectory { get; }
     public string Name => Work?.Name ?? Request.InstanceName;
-    public string? IconUrl => Work?.IconUrl ?? Pack?.IconUrl;
+    public string? IconUrl => Work?.IconUrl ?? Pack?.IconUrl ?? OnlinePack?.Project.IconUrl;
     public LoaderKind Loader => Request.Loader;
-    public string Subtitle => Work?.Subtitle ?? $"Minecraft {Request.MinecraftVersion}  ·  {(Loader == LoaderKind.Vanilla ? "原版" : Loader + " " + Request.LoaderVersion)}";
+    public string Subtitle => Work?.Subtitle ?? (OnlinePack is not null && Pack is null ? OnlinePack.Release.Name
+        : $"Minecraft {Request.MinecraftVersion}  ·  {(Loader == LoaderKind.Vanilla ? "原版" : Loader + " " + Request.LoaderVersion)}");
     public DownloadTaskState State { get; private set; } = DownloadTaskState.Queued;
     public string Stage { get; private set; } = "等待下载";
     public string Detail { get; private set; } = "已加入下载队列";
@@ -52,14 +56,21 @@ public sealed class DownloadTask : INotifyPropertyChanged
         DownloadTaskState.Running => "#2563EB", _ => "#8995A9"
     };
 
-    internal DownloadTask(InstallRequest request, AppSettings settings, PackInfo? pack, DownloadWork? work = null)
+    internal DownloadTask(InstallRequest request, AppSettings settings, PackInfo? pack, DownloadWork? work = null, PackReleaseDownload? onlinePack = null)
     {
         Request = request;
         Settings = new AppSettings { GameDirectory = Path.GetFullPath(settings.GameDirectory), Source = settings.Source,
             JavaPath = settings.JavaPath, ParallelDownloads = settings.ParallelDownloads, CurseForgeApiKey = settings.CurseForgeApiKey, IncludeOptionalMods = settings.IncludeOptionalMods };
         Pack = pack;
         Work = work;
+        OnlinePack = onlinePack;
         TargetDirectory = work is null ? SafePaths.Under(Settings.GameDirectory, "versions/" + request.InstanceName) : Path.GetDirectoryName(work.TargetFiles[0])!;
+    }
+    internal void SetPreparedPack(InstallRequest request, PackInfo pack)
+    {
+        Request = request;
+        Pack = pack;
+        Notify();
     }
     internal int Start()
     {

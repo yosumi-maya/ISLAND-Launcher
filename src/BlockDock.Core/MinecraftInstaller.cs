@@ -11,8 +11,13 @@ public sealed class MinecraftInstaller
     public const string ManifestUrl = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
     private readonly AppSettings settings;
     public DownloadClient Network { get; }
-    private List<GameVersion>? versions;
-    public MinecraftInstaller(AppSettings settings, DownloadClient network) { this.settings = settings; Network = network; }
+    private IReadOnlyList<GameVersion>? versions;
+    public MinecraftInstaller(AppSettings settings, DownloadClient network, IReadOnlyList<GameVersion>? knownVersions = null)
+    {
+        this.settings = settings;
+        Network = network;
+        versions = knownVersions;
+    }
 
     public async Task<IReadOnlyList<GameVersion>> GetVersionsAsync(CancellationToken token)
     {
@@ -24,7 +29,7 @@ public sealed class MinecraftInstaller
 
     public async Task<JsonObject> GetVersionJsonAsync(string version, CancellationToken token)
     {
-        var all = versions ?? (await GetVersionsAsync(token)).ToList();
+        var all = versions ?? await GetVersionsAsync(token);
         var entry = all.FirstOrDefault(v => v.Id == version) ?? throw new InvalidDataException($"官方列表中不存在 Minecraft {version}。");
         var cache = SafePaths.Under(settings.GameDirectory, $".blockdock/cache/metadata/{SafePaths.InstanceName(version)}.json");
         await Network.DownloadAsync(new(cache, [entry.Url], Sha1: entry.Sha1), token);

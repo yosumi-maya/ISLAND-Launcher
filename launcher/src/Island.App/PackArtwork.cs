@@ -22,7 +22,7 @@ public sealed class PackArtwork : Grid
     private int revision;
     public PackArtwork()
     {
-        SetResourceReference(BackgroundProperty, "AccentSoft"); initials.SetResourceReference(TextBlock.ForegroundProperty, "AccentInk");
+        SetResourceReference(BackgroundProperty, "SelectionBackground"); initials.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
         Children.Add(initials); Children.Add(artwork); ClipToBounds = true;
         SizeChanged += (_, _) => Clip = new RectangleGeometry(new Rect(RenderSize), 8, 8);
     }

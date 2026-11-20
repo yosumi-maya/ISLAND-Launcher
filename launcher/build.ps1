@@ -32,9 +32,9 @@ $hash = Get-FileHash -LiteralPath (Join-Path $outputPath '岛屿启动器.exe') 
 $applicationProject = [xml](Get-Content -LiteralPath (Join-Path $launcherRoot 'src/Island.App/Island.App.csproj') -Raw)
 $applicationVersion = $applicationProject.SelectSingleNode('//Version').InnerText
 $archivePath = Join-Path $launcherRoot "dist/IslandLauncher-$applicationVersion-$Runtime.zip"
-$releaseFiles = Get-ChildItem -LiteralPath $outputPath -File | Where-Object { $_.Extension -ne '.pdb' }
+$releaseExecutable = Join-Path $outputPath '岛屿启动器.exe'
 [System.IO.Directory]::CreateDirectory((Split-Path -Parent $archivePath)) | Out-Null
-Compress-Archive -LiteralPath $releaseFiles.FullName -DestinationPath $archivePath -Force
+Compress-Archive -LiteralPath $releaseExecutable -DestinationPath $archivePath -Force
 Write-Output "启动器：$(Join-Path $outputPath '岛屿启动器.exe')"
 Write-Output "便携包：$archivePath"
 Write-Output "SHA256：$($hash.Hash)"

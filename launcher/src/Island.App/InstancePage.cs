@@ -7,7 +7,7 @@ using Microsoft.Win32;
 
 namespace Island.App;
 
-public sealed class InstanceWindow : FormWindow
+public sealed class InstancePage : FormPage
 {
     private readonly InstanceCard card;
     private readonly CancellationTokenSource lifetime = new();
@@ -15,7 +15,7 @@ public sealed class InstanceWindow : FormWindow
     private readonly TextBlock javaStatus = new() { Name = "InstanceJavaStatus", Text = "可沿用全局设置、自动匹配，或为这个版本单独选择 Java。", TextWrapping = TextWrapping.Wrap, FontSize = 11, Margin = new Thickness(0, 7, 0, 0) };
     private readonly TextBlock modSummary = new() { Margin = new Thickness(0, 0, 0, 10) };
     private readonly TextBlock status = new() { Margin = new Thickness(0, 10, 0, 0), TextWrapping = TextWrapping.Wrap };
-    public InstanceWindow(Window owner, InstanceCard instance, LauncherState state, Action save) : base(owner, instance.DisplayName, instance.VersionLine + " · " + instance.Loader + $" · 累计游玩 {instance.Preferences.PlayedMinutes:0.0} 分钟\n" + instance.Runtime.Reason + "\n" + instance.RuntimeDirectory, 700)
+    public InstancePage(Window owner, InstanceCard instance, LauncherState state, Action save, Action openMods) : base(owner, instance.DisplayName, instance.VersionLine + " · " + instance.Loader + $" · 累计游玩 {instance.Preferences.PlayedMinutes:0.0} 分钟\n" + instance.Runtime.Reason + "\n" + instance.RuntimeDirectory, "实例管理")
     {
         card = instance;
         var runtimes = owner is MainWindow main ? main.JavaRuntimes : new JavaRuntimeCache();
@@ -42,7 +42,7 @@ public sealed class InstanceWindow : FormWindow
         iconRow.Children.Add(new TextBlock { Text="游戏图标",VerticalAlignment=VerticalAlignment.Center }); Grid.SetColumn(iconPreview,1); iconRow.Children.Add(iconPreview);
         var editIcon=Button("\uE70F",(_,_) => Try(() =>
         {
-            var chooser=new InstanceIconWindow(this,iconKey,iconPng);
+            var chooser=new InstanceIconWindow(HostWindow,iconKey,iconPng);
             if(chooser.ShowDialog()!=true) return;
             iconKey=chooser.IconKey; iconPng=chooser.IconPng;
             iconPreview.Source=iconPng is not null ? InstanceIcons.Decode(iconPng) : InstanceIcons.Contains(iconKey) ? InstanceIcons.Builtin(iconKey) : new InstanceCard(card.Instance,new InstancePreferences()).Icon;
@@ -85,7 +85,7 @@ public sealed class InstanceWindow : FormWindow
         var browseJava = Button("浏览…", (_, _) =>
         {
             var file = new OpenFileDialog { Title = "为此版本选择 Java", Filter = "Java 程序|java.exe;javaw.exe" };
-            if (file.ShowDialog(this) == true) { java.SelectedItem = null; java.Text = file.FileName; }
+            if (file.ShowDialog(HostWindow) == true) { java.SelectedItem = null; java.Text = file.FileName; }
         }); Grid.SetColumn(browseJava, 1); javaRow.Children.Add(browseJava);
         var detectingJava = false;
         async Task RefreshJava(bool force, Button button)
@@ -152,9 +152,9 @@ public sealed class InstanceWindow : FormWindow
         Label("模组管理");
         if (!card.Runtime.Isolated) Body.Children.Add(new TextBlock { Text = "当前模组保存在共享根目录，修改会影响使用同一目录的版本。", TextWrapping = TextWrapping.Wrap, FontSize = 11, Margin = new Thickness(0, 0, 0, 8) });
         Body.Children.Add(modSummary);
-        var manageMods = Button("管理模组", (_, _) => Try(() => { new ModManagerWindow(this, card).ShowDialog(); ReloadMods(); }));
+        var manageMods = Button("管理模组", (_, _) => Try(() => { openMods(); }));
         manageMods.HorizontalAlignment = HorizontalAlignment.Left; manageMods.Margin = new Thickness(0); Body.Children.Add(manageMods); Body.Children.Add(status);
-        Actions.Children.Add(Button("关闭", (_, _) => Close()));
+        Actions.Children.Add(Button("返回", (_, _) => Close()));
         Actions.Children.Add(Button("保存设置", (_, _) => Try(() =>
         {
             var display = name.Text.Trim(); if (display.Length is 0 or > 100) throw new ArgumentException("显示名称需为 1–100 个字符。");
@@ -174,7 +174,7 @@ public sealed class InstanceWindow : FormWindow
         KeepActionsVisible();
         ReloadMods();
     }
-    private void ReloadMods()
+    internal void ReloadMods()
     {
         var items = ModFiles.List(card.RuntimeDirectory);
         modSummary.Text = items.Count == 0 ? "此实例暂无模组。可在模组管理中添加、搜索和批量启用 / 停用。" : $"共 {items.Count} 个模组 · {items.Count(m => m.Enabled)} 个已启用";

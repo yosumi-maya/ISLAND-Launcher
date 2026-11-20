@@ -23,13 +23,13 @@ public sealed class DownloadQueue
         this.worker = worker;
         Items = new(tasks);
     }
-    public DownloadTask Enqueue(InstallRequest request, AppSettings settings, PackInfo? pack = null)
+    public DownloadTask Enqueue(InstallRequest request, AppSettings settings, PackInfo? pack = null, PackReleaseDownload? onlinePack = null)
     {
         if (closed) throw new InvalidOperationException("下载队列已关闭。");
         request = request with { InstanceName = SafePaths.InstanceName(request.InstanceName) };
         if (request.Loader != LoaderKind.Vanilla && request.InstanceName.Equals(request.MinecraftVersion, StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("加载器版本名称需要与原版版本号不同。");
-        var task = new DownloadTask(request, settings, pack);
+        var task = new DownloadTask(request, settings, pack, onlinePack: onlinePack);
         if (tasks.Any(t => !t.IsEnded && t.TargetDirectory.Equals(task.TargetDirectory, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("相同名称的任务已在队列中，请先继续或取消该任务。");
         if (Directory.Exists(task.TargetDirectory) || File.Exists(task.TargetDirectory)) throw new IOException("已有相同名称的实例，请修改名称。");

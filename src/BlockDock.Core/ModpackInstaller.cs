@@ -185,28 +185,39 @@ public sealed class ModpackInstaller(AppSettings settings, DownloadClient networ
         {
             if (string.IsNullOrWhiteSpace(settings.CurseForgeApiKey)) throw new InvalidOperationException("CurseForge 下载服务暂不可用，请更新启动器后重试。");
             var files = new List<TransferFile>();
-            var entries = pack.Manifest.Array("files").OfType<JsonObject>().Where(f => settings.IncludeOptionalMods || f["required"]?.GetValue<bool>() != false).ToList();
-            for (int i = 0; i < entries.Count; i++)
+            var entries = pack.Manifest.Array("files").OfType<JsonObject>()
+                .Where(f => settings.IncludeOptionalMods || f["required"]?.GetValue<bool>() != false)
+                .Select(f => (Project: f.Long("projectID") ?? 0, File: f.Long("fileID") ?? 0)).Distinct().ToArray();
+            if (entries.Any(entry => entry.Project <= 0 || entry.File <= 0))
+                throw new InvalidDataException("CurseForge 清单中的项目或文件 ID 无效。");
+            progress?.Report(new("获取 CurseForge 下载地址", $"0/{entries.Length}", 0, entries.Length));
+            foreach (var batch in entries.Chunk(100))
             {
-                var entry = entries[i];
-                var project = entry.Long("projectID") ?? throw new InvalidDataException("缺少 CurseForge projectID。");
-                var fileId = entry.Long("fileID") ?? throw new InvalidDataException("缺少 CurseForge fileID。");
-                progress?.Report(new("获取 CurseForge 下载地址", $"{i + 1}/{entries.Count}", i, entries.Count));
-                var metadata = (await network.GetJsonAsync($"https://api.curseforge.com/v1/mods/{project}", token, settings.CurseForgeApiKey)).Object("data");
-                if (metadata["allowModDistribution"]?.GetValue<bool>() == false)
-                    throw new IOException($"项目 {project} 的作者未开放第三方下载，请从官方项目页获取文件。");
-                var response = await network.GetJsonAsync($"https://api.curseforge.com/v1/mods/{project}/files/{fileId}", token, settings.CurseForgeApiKey);
-                var data = response.Object("data");
-                if (data.Long("modId") != project || data.Long("id") != fileId || data["isAvailable"]?.GetValue<bool>() == false)
-                    throw new InvalidDataException("CurseForge 清单中的文件无效或已不可用。");
-                var url = data.Str("downloadUrl");
-                if (url.Length == 0)
-                    url = (await network.GetJsonAsync($"https://api.curseforge.com/v1/mods/{project}/files/{fileId}/download-url", token, settings.CurseForgeApiKey)).Str("data");
-                if (url.Length == 0) throw new IOException($"模组作者未开放第三方下载（项目 {project}，文件 {fileId}）。请从 CurseForge 下载完整整合包后导入原生目录 ZIP。");
-                var filename = SafePaths.InstanceName(data.Str("fileName"));
-                var sha = data.Array("hashes").FirstOrDefault(h => h?["algo"]?.GetValue<int>() == 1).Str("value");
-                if (sha.Length != 40 || !sha.All(Uri.IsHexDigit)) throw new InvalidDataException("CurseForge 没有提供有效的 SHA-1 校验值。");
-                files.Add(new(SafePaths.Under(instance, "mods/" + filename), [url], data.Long("fileLength"), sha));
+                var response = await network.GetCurseForgeFilesAsync(batch.Select(entry => entry.File).Distinct(), settings.CurseForgeApiKey, token);
+                var byFileId = response.Array("data").OfType<JsonObject>().ToLookup(file => file.Long("id"));
+                foreach (var (project, fileId) in batch)
+                {
+                    token.ThrowIfCancellationRequested();
+                    var data = byFileId[fileId].SingleOrDefault();
+                    if (data is null)
+                    {
+                        var fileApi = FormattableString.Invariant($"https://api.curseforge.com/v1/mods/{project}/files/{fileId}");
+                        data = (await network.GetJsonAsync(fileApi, token, settings.CurseForgeApiKey)).Object("data");
+                    }
+                    var url = data.Str("downloadUrl");
+                    if (data.Long("modId") != project || data.Long("id") != fileId
+                        || data["isAvailable"]?.GetValue<bool>() == false && string.IsNullOrWhiteSpace(url))
+                        throw new InvalidDataException($"CurseForge 文件 {fileId}（项目 {project}）无效或已不可用。");
+                    var filename = SafePaths.InstanceName(data.Str("fileName"));
+                    var sha = data.Array("hashes").FirstOrDefault(h => h.Long("algo") == 1).Str("value");
+                    if (sha.Length != 40 || !sha.All(Uri.IsHexDigit)) throw new InvalidDataException($"CurseForge 文件 {filename} 缺少有效的 SHA-1 校验值。");
+                    var size = data.Long("fileLength");
+                    if (string.IsNullOrWhiteSpace(url) && size is not > 0)
+                        throw new InvalidDataException($"CurseForge 文件 {filename} 缺少有效的大小，无法校验备用下载。");
+                    var urls = string.IsNullOrWhiteSpace(url) ? DownloadClient.CurseForgeCdnUrls(fileId, filename) : [url];
+                    files.Add(new(SafePaths.Under(instance, "mods/" + filename), urls, size, sha));
+                }
+                progress?.Report(new("获取 CurseForge 下载地址", $"{files.Count}/{entries.Length}", files.Count, entries.Length));
             }
             await network.DownloadManyAsync(files, "下载 CurseForge 模组", progress, token);
         }

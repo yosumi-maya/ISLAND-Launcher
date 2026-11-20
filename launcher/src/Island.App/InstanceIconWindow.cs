@@ -19,7 +19,7 @@ public sealed class InstanceIconWindow : FormWindow
          <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
           <Border x:Name="B" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="8" Padding="5"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
           <ControlTemplate.Triggers>
-           <Trigger Property="IsSelected" Value="True"><Setter TargetName="B" Property="Background" Value="{DynamicResource AccentSoft}"/></Trigger>
+           <Trigger Property="IsSelected" Value="True"><Setter TargetName="B" Property="Background" Value="{DynamicResource SelectionBackground}"/></Trigger>
            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="B" Property="BorderBrush" Value="{DynamicResource Focus}"/></Trigger>
 
           </ControlTemplate.Triggers>

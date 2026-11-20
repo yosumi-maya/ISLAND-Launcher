@@ -63,10 +63,10 @@ internal static class MultiplayerUiTests
             Field<TextBox>(page,"RoomInput").Text="U/ABCD-1234-EFGH-5678";Click(Button("JoinButton"));await Wait(()=>engine.Joins==1 && page.HasRoom && Button("LeaveButton").IsEnabled);
             engine.Set("guest-ok",address:"127.0.0.1:25566");await Wait(()=>Field<TextBox>(page,"RoomValue").Text=="127.0.0.1:25566");
             check(Text("DetailText").Text.Contains("多人游戏") && Text("RoomCaption").Text.Contains("地址"),"Successful joining shows the game entry instructions and local address");capture(window,"Multiplayer-Guest-1020");
-            var themes=Find<WrapPanel>(window,"ThemePresetButtons").Children.OfType<Button>().ToArray();
+            var themes=Find<WrapPanel>(window,"AppearanceModeButtons").Children.OfType<Button>().ToArray();
             Click(themes.Single(b=>b.Tag as string=="#5DAF98"));await Task.Delay(120);Find<RadioButton>(window,"NavMultiplayer").IsChecked=true;window.UpdateLayout();capture(window,"Multiplayer-Guest-Dark-1020");
             check(AppearanceRenderer.Current.DarkTheme,"Multiplayer inherits the saved dark appearance preset");
-            Click(themes.Single(b=>b.Tag as string=="#32634D"));await Task.Delay(120);Find<RadioButton>(window,"NavMultiplayer").IsChecked=true;
+            Click(themes.Single(b=>b.Tag as string=="default"));await Task.Delay(120);Find<RadioButton>(window,"NavMultiplayer").IsChecked=true;
             _=window.Dispatcher.BeginInvoke(new Action(()=>Click(Children<Button>(Application.Current.Windows.OfType<MessageWindow>().Single()).Single(b=>b.Content as string=="取消"))));
             window.Close();check(window.IsVisible && engine.IsStarted,"Declining room shutdown preserves the window and active session");
             engine.FailPoll=true;await Wait(()=>Text("StateText").Text.Contains("失去响应"));

@@ -23,15 +23,10 @@ public partial class MainWindow
         updatingTheme = true;
         foreach (var choice in AppearancePresets.All)
         {
-            var content = new StackPanel { Orientation = Orientation.Horizontal };
-            Brush swatch = choice.Glass ? new LinearGradientBrush((Color)ColorConverter.ConvertFromString("#E74D8B"), (Color)ColorConverter.ConvertFromString(choice.Color), 45)
-                : new SolidColorBrush((Color)ColorConverter.ConvertFromString(choice.Color));
-            content.Children.Add(new Border { Width = 12, Height = 12, CornerRadius = new CornerRadius(6), Background = swatch, Margin = new Thickness(0, 0, 7, 0) });
-            content.Children.Add(new TextBlock { Text = choice.Name });
-            var button = new Button { Name = "ThemePresetButton", Content = content, Tag = choice.Color, ToolTip = choice.Name + " · 点击应用并保存整套外观", Padding = new Thickness(10, 7, 10, 7), Margin = new Thickness(0, 0, 7, 7) };
-            button.Click += (_, _) => ApplyAppearancePreset(choice);
-            themeButtons.Add(button, choice); ThemePresetButtons.Children.Add(button);
+            if (choice.Glass || choice.Dark) AddAppearanceOption(choice, AppearanceModeButtons, changesSurfaces: true);
+            else AddAppearanceOption(choice, ThemePresetButtons, changesSurfaces: false);
         }
+        AddAppearanceOption(new AppearancePreset("默认外观", AppearanceSettings.DefaultColor), AppearanceModeButtons, changesSurfaces: true);
         ThemeColorBox.Text = state.ThemeColor; ThemeColorSample.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(state.ThemeColor)); UpdateThemeButtons();
         HideSidebarDollBox.IsChecked = state.Appearance.HideSidebarDoll;
         LaunchBarAlwaysBox.IsChecked = state.Appearance.LaunchBarMode == LaunchBarMode.Always;
@@ -52,11 +47,33 @@ public partial class MainWindow
         Closed += (_, _) => appearanceTimer.Stop();
         updatingTheme = false;
     }
+    private void AddAppearanceOption(AppearancePreset choice, WrapPanel panel, bool changesSurfaces)
+    {
+        var content = new StackPanel { Orientation = Orientation.Horizontal };
+        Brush swatch = choice.Glass
+            ? new LinearGradientBrush((Color)ColorConverter.ConvertFromString("#E74D8B"), (Color)ColorConverter.ConvertFromString(choice.Color), 45)
+            : new SolidColorBrush((Color)ColorConverter.ConvertFromString(choice.Color));
+        if (!changesSurfaces || choice.Glass || choice.Dark)
+            content.Children.Add(new Border { Width = 12, Height = 12, CornerRadius = new CornerRadius(6), Background = swatch, Margin = new Thickness(0, 0, 7, 0) });
+        content.Children.Add(new TextBlock { Text = choice.Name });
+        var button = new Button
+        {
+            Name = changesSurfaces ? "AppearanceModeButton" : "ThemePresetButton", Content = content,
+            Tag = changesSurfaces && !choice.Glass && !choice.Dark ? "default" : choice.Color,
+            ToolTip = changesSurfaces ? choice.Name + " · 应用背景和材质方案" : choice.Name + " · 更改强调色",
+            Padding = new Thickness(10, 7, 10, 7), Margin = new Thickness(0, 0, 7, 7)
+        };
+        button.Click += (_, _) => ApplyAppearancePreset(choice, changesSurfaces);
+        themeButtons.Add(button, choice);
+        panel.Children.Add(button);
+    }
     private void UpdateThemeButtons()
     {
         foreach (var (button, choice) in themeButtons)
         {
-            var selected = choice.Matches(state.Appearance, state.ThemeColor);
+            var selected = button.Name == "ThemePresetButton"
+                ? string.Equals(choice.Color, state.ThemeColor, StringComparison.OrdinalIgnoreCase)
+                : choice.Matches(state.Appearance, choice.Color);
             button.BorderThickness = new Thickness(1);
             button.SetResourceReference(Control.BorderBrushProperty, "Line");
             button.SetResourceReference(Control.BackgroundProperty, selected ? "AccentSoft" : "Surface");
@@ -141,13 +158,30 @@ public partial class MainWindow
         finally { updatingTheme = false; }
         RefreshAppearancePreview();
     }
-    private void ApplyAppearancePreset(AppearancePreset preset)
+    private void ApplyAppearancePreset(AppearancePreset preset, bool changesSurfaces)
     {
         try
         {
-            CommitAppearance(preset.Create(store.DirectoryPath, state.Appearance.HideSidebarDoll, state.Appearance.LaunchBarMode, state.Appearance.CardAnimation), preset.Color);
-            LoadAppearanceDraft();
-            ThemeColorStatus.Text = "预设已应用，可继续微调，保存后生效。";
+            if (changesSurfaces)
+            {
+                var current = state.Appearance;
+                CommitAppearance(preset.Create(store.DirectoryPath, current.HideSidebarDoll, current.LaunchBarMode, current.CardAnimation),
+                    preset.Glass || preset.Dark ? preset.Color : state.ThemeColor);
+                LoadAppearanceDraft();
+                ThemeColorStatus.Text = "外观方案已应用。";
+                return;
+            }
+
+            CommitAppearance(state.Appearance, preset.Color);
+            updatingTheme = true;
+            try
+            {
+                ThemeColorBox.Text = preset.Color;
+                ThemeColorSample.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(preset.Color));
+            }
+            finally { updatingTheme = false; }
+            RefreshAppearancePreview();
+            ThemeColorStatus.Text = "预设配色已应用。";
         }
         catch (Exception ex) { Report(ex); }
     }
@@ -160,8 +194,7 @@ public partial class MainWindow
     private void OpenAppearance(object sender, RoutedEventArgs e)
     {
         NavSettings.IsChecked = true;
-        LibraryPage.Visibility = AccountsPage.Visibility = LogsPage.Visibility = SettingsPage.Visibility = MultiplayerPage.Visibility = Visibility.Collapsed;
-        AppearancePage.Visibility = Visibility.Visible;
+        ShowPage(AppearancePage);
         AppearanceSettingsScroll.ScrollToTop();
     }
     private void EditRecentMapAppearance(object sender, RoutedEventArgs e)
@@ -171,7 +204,7 @@ public partial class MainWindow
     }
     private void ReturnToSettings(object sender, RoutedEventArgs e)
     {
-        AppearancePage.Visibility = Visibility.Collapsed; SettingsPage.Visibility = Visibility.Visible; NavSettings.IsChecked = true;
+        NavSettings.IsChecked = true; ShowPage(SettingsPage);
     }
     private void SaveAppearanceClick(object sender, RoutedEventArgs e) => SaveAppearance();
     private LauncherAppearance ReadAppearance()

@@ -4,6 +4,8 @@ using System.Runtime.ExceptionServices;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace BlockDock.Core;
@@ -44,7 +46,7 @@ public sealed class DownloadClient : IDisposable
     private static bool CurseForgeHost(Uri uri) => uri.Scheme == "https" && uri.Port == 443
         && uri.UserInfo.Length == 0 && uri.Host is "api.curseforge.com" or "edge.forgecdn.net" or "mediafilez.forgecdn.net";
 
-    private async Task<HttpResponseMessage> SendAsync(Uri uri, CancellationToken token, string? apiKey = null, long offset = 0)
+    private async Task<HttpResponseMessage> SendAsync(Uri uri, CancellationToken token, string? apiKey = null, long offset = 0, string? jsonBody = null)
     {
         var metadata = uri.Host == "api.curseforge.com";
         if (metadata) await curseForgeGate.WaitAsync(token);
@@ -52,7 +54,8 @@ public sealed class DownloadClient : IDisposable
         {
             for (var redirects = 0; redirects <= 5; redirects++)
             {
-                using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+                using var request = new HttpRequestMessage(jsonBody is null ? HttpMethod.Get : HttpMethod.Post, uri);
+                if (jsonBody is not null) request.Content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
                 if (offset > 0) request.Headers.Range = new RangeHeaderValue(offset, null);
                 // Explicitly discard credentials before contacting a mirror or redirected third party.
                 var requestKey = CurseForgeHost(uri) ? apiKey ?? settings.CurseForgeApiKey : null;
@@ -74,6 +77,7 @@ public sealed class DownloadClient : IDisposable
                     or HttpStatusCode.TemporaryRedirect or HttpStatusCode.PermanentRedirect) || response.Headers.Location is null)
                     return response;
                 var next = new Uri(uri, response.Headers.Location); response.Dispose();
+                if (jsonBody is not null) throw new InvalidDataException("CurseForge 批量文件请求返回了重定向。");
                 if (next.Scheme != "https" && !(next.IsLoopback && next.Scheme == "http"))
                     throw new InvalidDataException("下载重定向必须使用 HTTPS。");
                 uri = next;
@@ -115,7 +119,10 @@ public sealed class DownloadClient : IDisposable
         var speed = transferred / Math.Max(.001, elapsed.TotalSeconds);
         throughput.AddOrUpdate(uri.Host, speed, (_, old) => old * .5 + speed * .5);
     }
-    public async Task<string> GetTextAsync(string url, CancellationToken token, string? apiKey = null)
+    public Task<string> GetTextAsync(string url, CancellationToken token, string? apiKey = null)
+        => GetTextAsync(url, token, apiKey, null);
+
+    private async Task<string> GetTextAsync(string url, CancellationToken token, string? apiKey, string? jsonBody)
     {
         var errors = new List<string>();
         var candidates = OrderCandidates([url]);
@@ -128,7 +135,7 @@ public sealed class DownloadClient : IDisposable
             {
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
                 timeout.CancelAfter(candidates.Length > 1 && attempt == 0 ? TimeSpan.FromSeconds(10) : TimeSpan.FromSeconds(30));
-                using var response = await SendAsync(uri, timeout.Token, CurseForgeHost(uri) ? apiKey : null);
+                using var response = await SendAsync(uri, timeout.Token, CurseForgeHost(uri) ? apiKey : null, jsonBody: jsonBody);
                 response.EnsureSuccessStatusCode();
                 var result = await response.Content.ReadAsStringAsync(timeout.Token);
                 cooldown.TryRemove(uri.Host, out _);
@@ -143,7 +150,20 @@ public sealed class DownloadClient : IDisposable
     public async Task<JsonObject> GetJsonAsync(string url, CancellationToken token, string? apiKey = null)
         => JsonNode.Parse(await GetTextAsync(url, token, apiKey)) as JsonObject ?? throw new InvalidDataException("服务器返回了无效的 JSON 对象。");
 
-    public async Task DownloadAsync(TransferFile file, CancellationToken token, Action<long>? onBytes = null)
+    internal async Task<JsonObject> GetCurseForgeFilesAsync(IEnumerable<long> fileIds, string apiKey, CancellationToken token)
+    {
+        var body = JsonSerializer.Serialize(new { fileIds });
+        var response = await GetTextAsync("https://api.curseforge.com/v1/mods/files", token, apiKey, body);
+        return JsonNode.Parse(response) as JsonObject ?? throw new InvalidDataException("CurseForge 返回了无效的批量文件列表。");
+    }
+
+    internal static string[] CurseForgeCdnUrls(long fileId, string filename)
+    {
+        var path = FormattableString.Invariant($"/files/{fileId / 1000}/{fileId % 1000}/{Uri.EscapeDataString(filename)}");
+        return ["https://edge.forgecdn.net" + path, "https://mediafilez.forgecdn.net" + path];
+    }
+
+    public async Task DownloadAsync(TransferFile file, CancellationToken token, Action<long>? onBytes = null, Action<long>? onFilePosition = null)
     {
         if (await ValidAsync(file.Path, file, token)) return;
         Directory.CreateDirectory(Path.GetDirectoryName(file.Path)!);
@@ -185,6 +205,7 @@ public sealed class DownloadClient : IDisposable
                         await output.WriteAsync(buffer.AsMemory(0, read), timeout.Token);
                         Interlocked.Add(ref bytes, read);
                         onBytes?.Invoke(read);
+                        onFilePosition?.Invoke(output.Position);
                         token.ThrowIfCancellationRequested();
                         received += read;
                         var window = transferWatch.Elapsed - windowStart;

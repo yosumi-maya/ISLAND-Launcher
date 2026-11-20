@@ -31,6 +31,7 @@ internal static class DownloadCenterUiTests
     internal sealed class Service : ILauncherDownloads
     {
         public int GameRequests;
+        public Exception? GameError;
         public int SearchRequests;
         public int LastPage;
         public PackSearchFilter? LastFilter;
@@ -41,7 +42,7 @@ internal static class DownloadCenterUiTests
         public TaskCompletionSource Gate(string name)
         { if (!Gates.TryGetValue(name, out var gate)) Gates[name] = gate = new(TaskCreationOptions.RunContinuationsAsynchronously); return gate; }
         public Task<IReadOnlyList<GameVersion>> GetGamesAsync(AppSettings settings, CancellationToken token)
-        { GameRequests++; return Task.FromResult<IReadOnlyList<GameVersion>>([new("1.20.1", "release", "https://fixture.invalid/version", null, DateTimeOffset.Now), new("fixture-snapshot", "snapshot", "https://fixture.invalid/snapshot", null, DateTimeOffset.Now)]); }
+        { GameRequests++; if (GameError is not null) return Task.FromException<IReadOnlyList<GameVersion>>(GameError); return Task.FromResult<IReadOnlyList<GameVersion>>([new("1.20.1", "release", "https://fixture.invalid/version", null, DateTimeOffset.Now), new("fixture-snapshot", "snapshot", "https://fixture.invalid/snapshot", null, DateTimeOffset.Now)]); }
         public Task<IReadOnlyList<LoaderVersion>> GetLoadersAsync(AppSettings settings, LoaderKind loader, string version, CancellationToken token)
             => Task.FromResult<IReadOnlyList<LoaderVersion>>([new("fixture-loader", "fixture-loader")]);
         public Task<CatalogSearchPage> SearchAsync(AppSettings settings, PackSearchFilter filter, int page, CancellationToken token)
@@ -59,8 +60,13 @@ internal static class DownloadCenterUiTests
                 ["1.20.1"], ["fabric"], DateTimeOffset.Now.AddDays(-i), i % 2 == 0 ? "正式版" : "测试版", new()))
                 .Concat([new("modern-release", "Modern release", ["26.3"], ["neoforge", "fabric"], DateTimeOffset.Now.AddDays(-100), "正式版", new()),
                     new("snapshot-release", "Snapshot release", ["26w01a"], ["fabric"], DateTimeOffset.Now.AddDays(-101), "测试版", new())]).ToArray(), null));
-        public Task<PackInfo> PrepareAsync(AppSettings settings, CatalogProject project, CatalogVersion release, CancellationToken token)
-            => Task.FromResult(new PackInfo { ArchivePath = Path.Combine(settings.GameDirectory, "owned-fixture.mrpack"), Name = "Fixture Pack", MinecraftVersion = "1.20.1", Format = PackFormat.Modrinth, OptionalCount = 2, Manifest = new() });
+        public TaskCompletionSource? PrepareGate;
+        public async Task<PackInfo> PrepareAsync(AppSettings settings, CatalogProject project, CatalogVersion release, CancellationToken token, IProgress<InstallProgress>? progress = null)
+        {
+            progress?.Report(new("下载整合包文件", release.Name));
+            if (PrepareGate is { } gate) await gate.Task.WaitAsync(token);
+            return new PackInfo { ArchivePath = Path.Combine(settings.GameDirectory, "owned-fixture.mrpack"), Name = "Fixture Pack", MinecraftVersion = "1.20.1", Format = PackFormat.Modrinth, OptionalCount = 2, Manifest = new() };
+        }
         public Func<string, CancellationToken, Task<PackInfo>>? Inspect;
         public Task<PackInfo> InspectAsync(string file, CancellationToken token) => Inspect?.Invoke(file, token) ?? throw new NotSupportedException();
         public async Task<string> InstallAsync(AppSettings settings, InstallRequest request, PackInfo? pack, IProgress<InstallProgress> progress, CancellationToken token)
@@ -123,6 +129,15 @@ internal static class DownloadCenterUiTests
             await Wait(() => Find<Button>(center, "InstallGameButton").IsEnabled); window.UpdateLayout();
             check(center.IsVisible && center.FindName("AvailabilityNotice") is null
                 && Find<ComboBox>(center, "GameVersions").Items.Count == 1 && center.FindName("Destination") is null, "Download center shows game selection without the removed destination line or availability banner");
+            Find<RadioButton>(window, "NavLibrary").IsChecked = true;
+            Find<RadioButton>(window, "NavDownloads").IsChecked = true;
+            check(service.GameRequests == 1, "Re-entering game downloads reuses the loaded version list");
+            service.GameError = new IOException("fixture network offline");
+            Click(Find<Button>(center, "ReloadGamesButton"));
+            await Wait(() => Find<TextBlock>(center, "GameStatus").Text.Contains("继续使用上次的版本列表"));
+            check(service.GameRequests == 2 && Find<ComboBox>(center, "GameVersions").Items.Count == 1
+                && Find<Button>(center, "InstallGameButton").IsEnabled, "Manual refresh failure keeps the existing versions available to install");
+            service.GameError = null;
             Find<CheckBox>(center, "ShowSnapshots").IsChecked = true;
             check(Find<ComboBox>(center, "GameVersions").Items.Count == 2, "Game downloads can include snapshots and historical versions");
             Find<CheckBox>(center, "ShowSnapshots").IsChecked = false;
@@ -224,6 +239,7 @@ internal static class DownloadCenterUiTests
                 && !Find<Button>(center, "ChoosePackButton").IsEnabled, "An empty failed search exposes an actionable retry and disables installation");
             service.SearchError = null;
             await center.SearchAsync(0); service.Gate("Queued pack").SetResult();
+            service.PrepareGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
             Exception? modalError = null;
             _ = window.Dispatcher.BeginInvoke(new Action(async () =>
             {
@@ -231,7 +247,7 @@ internal static class DownloadCenterUiTests
                 {
                     await Wait(() => Application.Current.Windows.OfType<PackReleaseWindow>().Any());
                     var release = Application.Current.Windows.OfType<PackReleaseWindow>().Single();
-                    await Wait(() => Children<Button>(release).Any(b => b.Content as string == "下一步  →" && b.IsEnabled));
+                    await Wait(() => Children<Button>(release).Any(b => b.Content as string == "加入队列" && b.IsEnabled));
                     var browser = Children<CatalogReleaseBrowser>(release).Single();
                     check(browser.ReleaseFilters.Visibility == Visibility.Collapsed, "Modpack details omit the extra release search, version, loader and channel filter row");
                     var chips = Find<StackPanel>(browser, "VersionChips").Children.OfType<RadioButton>().ToArray();
@@ -263,7 +279,7 @@ internal static class DownloadCenterUiTests
                     Children<ScrollViewer>(releaseList).First().ScrollToTop(); await Task.Delay(30); release.UpdateLayout();
                     capture(release, "Downloads-Pack-Releases");
                     release.Width = 680; release.Height = 620; release.UpdateLayout();
-                    var next = Children<Button>(release).Single(b => b.Content as string == "下一步  →");
+                    var next = Children<Button>(release).Single(b => b.Content as string == "加入队列");
                     check(next.TransformToAncestor(release).TransformBounds(new Rect(next.RenderSize)).Bottom < release.ActualHeight
                         && releaseList.ActualHeight >= 80, "Release scrolling and the fixed install action fit shorter windows");
                     capture(release, "Downloads-Pack-Releases-Compact");
@@ -279,7 +295,7 @@ internal static class DownloadCenterUiTests
                         check(ThemeManager.Contrast(foreground, background) >= 4.5, "Release metadata remains readable in " + (dark ? "dark" : "light") + " themes");
                         capture(release, dark ? "Downloads-Pack-Releases-Dark" : "Downloads-Pack-Releases-Blue");
                     }
-                    _ = release.Dispatcher.BeginInvoke(new Action(() => Click(Children<Button>(release).Single(b => b.Content as string == "下一步  →"))));
+                    _ = release.Dispatcher.BeginInvoke(new Action(() => Click(Children<Button>(release).Single(b => b.Content as string == "安装选项"))));
                     await Wait(() => Application.Current.Windows.OfType<PackConfirmationWindow>().Any());
                     var confirmation = Application.Current.Windows.OfType<PackConfirmationWindow>().Single();
                     var packName = Children<TextBox>(confirmation).Single();
@@ -290,6 +306,7 @@ internal static class DownloadCenterUiTests
                     check(!confirmPack.IsEnabled && Children<TextBlock>(confirmation).Any(t => t.Text.Contains("已有相同名称的实例")), "Pack confirmation immediately rejects an existing name ignoring case");
                     packName.Text = "   Fixture Pack   ";
                     check(!confirmPack.IsEnabled && center.Queue.Items.Count == 0, "Whitespace around a duplicate name cannot bypass validation or enqueue an install");
+                    Directory.Delete(existingPack);
                     packName.Text = "Queued pack";
                     check(confirmPack.IsEnabled && !Children<TextBlock>(confirmation).Any(t => t.Text.Contains("已有相同名称的实例")), "Changing to an available name restores the install button and clears the error");
                     var raced = Path.Combine(firstRoot, "versions", "Queued pack"); Directory.CreateDirectory(raced);
@@ -307,9 +324,32 @@ internal static class DownloadCenterUiTests
                 }
             }));
             Click(Find<Button>(center, "ChoosePackButton")); if (modalError is not null) throw modalError;
+            var packTask = center.Queue.Items.Single();
+            await Wait(() => { center.Queue.FlushProgress(); return packTask.Stage == "下载整合包文件"; });
+            check(packTask.State == DownloadTaskState.Running && packTask.Pack is null && service.Runs.Count == 0,
+                "The release dialog closes and the queue shows archive download progress before installation begins");
+            service.PrepareGate.SetResult();
             await Wait(() => center.Queue.Items.Single().State == DownloadTaskState.Completed);
             check(center.Queue.Items.Single().Pack?.Format == PackFormat.Modrinth && !center.Queue.Items.Single().Settings.IncludeOptionalMods
                 && File.Exists(Path.Combine(firstRoot, "versions", "Queued pack", "Queued pack.json")), "Selecting a release and confirming its name and optional mods installs through the shared queue");
+            center.Queue.ClearEnded();
+            service.PrepareGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            Find<RadioButton>(center, "PacksTab").IsChecked = true;
+            await center.SearchAsync(0);
+            _ = window.Dispatcher.BeginInvoke(new Action(async () =>
+            {
+                await Wait(() => Application.Current.Windows.OfType<PackReleaseWindow>().Any());
+                var release = Application.Current.Windows.OfType<PackReleaseWindow>().Single();
+                var enqueue = Children<Button>(release).Single(button => button.Content as string == "加入队列");
+                try { await Wait(() => enqueue.IsEnabled); Click(enqueue); }
+                catch (Exception ex) { modalError = ex; release.Close(); }
+            }));
+            Click(Find<Button>(center, "ChoosePackButton")); if (modalError is not null) throw modalError;
+            var directPack = center.Queue.Items.Single();
+            check(directPack.OnlinePack is not null && directPack.Pack is null && service.Runs.Count == 1,
+                "Adding a release directly queues the archive download with default settings and no confirmation dialog");
+            center.Queue.Cancel(directPack);
+            await Wait(() => directPack.State == DownloadTaskState.Canceled);
             center.Queue.ClearEnded();
             Find<RadioButton>(center, "GamesTab").IsChecked = true; Find<TextBox>(center, "NewInstanceName").Text = "Queued A";
             Find<TextBox>(center, "NewInstanceName").Text = "Queued pack";

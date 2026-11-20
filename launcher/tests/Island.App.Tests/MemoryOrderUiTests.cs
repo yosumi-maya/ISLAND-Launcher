@@ -58,7 +58,9 @@ internal static class MemoryOrderUiTests
             check(cleanups==3 && log.Text.Contains("启动前内存清理未启用"),"Disabling cleanup skips the cleaner and proceeds directly to normal preparation");
             option.IsChecked=true;option.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));fails=false;outcome=MemoryCleanupOutcome.Completed;
             gate=new(TaskCreationOptions.RunContinuationsAsynchronously);
-            log.Clear();Click((Button)window.FindName("ContinueButton"));
+            var continueButton = (Button)window.FindName("ContinueButton");
+            await Program.WaitUntil(() => continueButton.IsEnabled, "Continue did not become available after loading the save");
+            log.Clear();Click(continueButton);
             await Wait(()=>cleanups==4);
             check(dialogs==3 && !log.Text.Contains("错误："), "Continue also waits for cleanup before refreshing a directory with invalid metadata");
             gate.SetResult(); gate=null;

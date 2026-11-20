@@ -48,10 +48,14 @@ internal static class InstanceContextMenuUiTests
             }
             static void Click(ContextMenu menu, string label) => menu.Items.OfType<MenuItem>().Single(item => item.Header as string == label).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             list.SelectedItem = Card(isolated, "Alpha"); var target = Card(shared, "Beta");
+            var continueButton = (Button)window.FindName("ContinueButton");
+            var worldName = (TextBlock)window.FindName("RecentWorldName");
+            await Program.WaitUntil(() => continueButton.IsEnabled, "The selected instance did not finish looking for saves");
             check(((TextBlock)window.FindName("RecentInstanceName")).Text == "Alpha" && ((Button)window.FindName("ContinueButton")).IsEnabled,
                 "Selecting a never-played instance updates the hero and permits ordinary continuation");
             var saved = FolderAndWorldTests.WriteWorld(shared, "Existing World", "共享世界", DateTimeOffset.Now);
-            var menu = Open(target); await Task.Delay(60);
+            var menu = Open(target);
+            await Program.WaitUntil(() => worldName.Text == "共享世界", "Shared world metadata did not finish loading");
             check(((TextBlock)window.FindName("RecentInstanceName")).Text == target.DisplayName
                 && ((TextBlock)window.FindName("RecentWorldName")).Text == "共享世界",
                 "Selecting another folder's card updates the hero and its own runtime save");
@@ -71,50 +75,36 @@ internal static class InstanceContextMenuUiTests
                 && opened.All(Directory.Exists), "Shared-instance folder shortcuts use its real runtime root and create missing subfolders without opening another root");
             opened.Clear(); var independent = Card(isolated, "Beta"); Click(Open(independent), "存档");
             check(opened.Single() == Path.Combine(isolated, "versions", "Beta", "saves"), "Isolated-instance shortcuts resolve inside that version instead of the shared game root");
-            var modChecked = false;
-            _ = window.Dispatcher.BeginInvoke(new Action(() =>
-            {
-                var dialog = Application.Current.Windows.OfType<ModManagerWindow>().Single();
-                try { modChecked = ((ListView)LogicalTreeHelper.FindLogicalNode(dialog, "ModsList")).Items.Cast<ModFile>().Single().Name == "shared-beta.jar"; capture(dialog, "Instance-Context-Mods"); }
-                finally { dialog.Close(); }
-            }));
-            Click(Open(target), "Mod 管理");
-            check(modChecked, "Mod management opens directly for the right-clicked instance and reads that instance's mods");
-            var managementChecked = false;
-            _ = window.Dispatcher.BeginInvoke(new Action(() =>
-            {
-                var dialog = Application.Current.Windows.OfType<InstanceWindow>().Single();
-                try
-                {
-                    dialog.UpdateLayout(); managementChecked = dialog.Title == target.DisplayName;
-                    var rows = Descendants<InstanceSettingRow>(dialog).ToArray();
-                    check(rows.Length == 3 && rows.All(row => !row.Expanded), "Instance runtime settings start as three compact collapsed rows");
-                    check(rows[0].Summary.Contains("全局") && rows[1].Summary.Contains("自动"), "Collapsed settings show inherited Java and memory summaries");
-                    capture(dialog, "Instance-Settings-Collapsed");
-                    rows[1].Expanded = true; dialog.UpdateLayout();
-                    check(Descendants<MemoryAllocationEditor>(dialog).Single().IsVisible, "Memory settings expand inside their row");
-                    capture(dialog, "Instance-Settings-Memory");
-                    var independent = Descendants<CheckBox>(dialog).Single(box => box.Name == "IndependentRuntimeBox"); independent.IsChecked = true;
-                    var memory = Descendants<MemoryAllocationEditor>(dialog).Single(); memory.Automatic = false; memory.ManualMemoryMb = 6144;
-                    check(memory.IsEnabled && rows[1].Summary.Contains("6.0"), "Independent memory edits update the compact summary");
-                    rows[1].Expanded = false; rows[2].Expanded = true; dialog.UpdateLayout(); capture(dialog, "Instance-Settings-Advanced");
-                    rows[2].Expanded = false; rows[0].Expanded = true; dialog.UpdateLayout(); capture(dialog, "Instance-Settings-Java");
-                    independent.IsChecked = false;
-                    check(!memory.IsEnabled && rows[1].Summary.Contains("全局"), "Returning to global settings restores the inherited summary");
-                }
-                finally { dialog.Close(); }
-            }));
-            Click(Open(target), "实例管理"); check(managementChecked, "Instance management remains reachable through the card context menu");
-            var managedFromButton = false;
-            _ = window.Dispatcher.BeginInvoke(new Action(() =>
-            {
-                var dialog = Application.Current.Windows.OfType<InstanceWindow>().Single();
-                managedFromButton = dialog.Title == ((InstanceCard)list.SelectedItem).DisplayName;
-                dialog.Close();
-            }));
+            var windowsBefore = Application.Current.Windows.Count;
+            Click(Open(target), "Mod 管理"); window.UpdateLayout(); await Task.Delay(190);
+            var modsPage = (ModManagerPage)window.ActiveManagementPage!;
+            check(((ListView)LogicalTreeHelper.FindLogicalNode(modsPage, "ModsList")).Items.Cast<ModListRow>().Single().File.Name == "shared-beta.jar",
+                "Inline mod management reads the exact right-clicked instance's runtime directory");
+            check(Application.Current.Windows.Count == windowsBefore && modsPage.IsVisible && ((FrameworkElement)window.FindName("LibraryPage")).Visibility == Visibility.Collapsed,
+                "Mod management occupies the main content area without opening a window");
+            capture(window, "Instance-Inline-Mods"); modsPage.Close();
+            Click(Open(target), "实例管理"); window.UpdateLayout(); await Task.Delay(190);
+            var instancePage = (InstancePage)window.ActiveManagementPage!;
+            check(instancePage.Title == target.DisplayName && Application.Current.Windows.Count == windowsBefore,
+                "Inline instance management targets the card without a modal window");
+            var rows = Descendants<InstanceSettingRow>(instancePage).ToArray();
+            check(rows.Length == 3 && rows.All(row => !row.Expanded), "Instance runtime settings start as three compact collapsed rows");
+            check(rows[0].Summary.Contains("全局") && rows[1].Summary.Contains("自动"), "Collapsed settings show inherited Java and memory summaries");
+            capture(window, "Instance-Inline-Settings");
+            rows[1].Expanded = true; window.UpdateLayout();
+            check(Descendants<MemoryAllocationEditor>(instancePage).Single().IsVisible, "Memory settings expand inside their row");
+            var independentSettings = Descendants<CheckBox>(instancePage).Single(box => box.Name == "IndependentRuntimeBox"); independentSettings.IsChecked = true;
+            var memory = Descendants<MemoryAllocationEditor>(instancePage).Single(); memory.Automatic = false; memory.ManualMemoryMb = 6144;
+            check(memory.IsEnabled && rows[1].Summary.Contains("6.0"), "Independent memory edits update the compact summary");
+            independentSettings.IsChecked = false;
+            check(!memory.IsEnabled && rows[1].Summary.Contains("全局"), "Returning to global settings restores the inherited summary");
+            instancePage.Close();
             ((Button)window.FindName("ManageButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            check(managedFromButton, "The bottom management button opens the currently selected instance");
+            check(window.ActiveManagementPage is InstancePage && ((InstancePage)window.ActiveManagementPage).Title == ((InstanceCard)list.SelectedItem).DisplayName,
+                "The bottom management button opens the currently selected inline instance page");
+            window.ActiveManagementPage!.Close();
             list.SelectedItem = Card(isolated, "Alpha");
+            await Program.WaitUntil(() => worldName.Text == "尚未发现单人存档", "The selected instance's empty save state did not finish loading");
             check(((TextBlock)window.FindName("RecentInstanceName")).Text == "Alpha"
                 && ((TextBlock)window.FindName("RecentWorldName")).Text == "尚未发现单人存档",
                 "Selecting an instance without saves clears the previous instance's save from the hero");

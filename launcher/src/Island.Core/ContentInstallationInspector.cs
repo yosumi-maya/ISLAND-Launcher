@@ -1,7 +1,5 @@
-using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using BlockDock.Core;
 
@@ -24,8 +22,7 @@ public sealed record ContentInstallationMatch(string ProjectId, string Path, Con
 
 public static class ContentInstallationInspector
 {
-    private sealed record Identity(string Id, string Name, string Version);
-    private sealed record LocalFile(string Path, bool Enabled, long Size, string Hash, string Sha1, IReadOnlyList<Identity> Identities, bool Unreadable);
+    private sealed record LocalFile(string Path, bool Enabled, long Size, string Hash, string Sha1, IReadOnlyList<ModMetadata> Identities, bool Unreadable);
 
     public static Task<IReadOnlyList<ContentInstallationMatch>> InspectAsync(ContentPlan plan, CancellationToken token, IProgress<string>? progress = null)
         => Task.Run(async () =>
@@ -60,7 +57,7 @@ public static class ContentInstallationInspector
                             }
                         }
                         found.Add(new(path, !path.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase), size, hash, sha1,
-                            kind == ContentKind.Mod ? ReadIdentities(path) : [], false));
+                            kind == ContentKind.Mod ? ModMetadataReader.Read(path) : [], false));
                     }
                     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
                     { found.Add(new(path, !path.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase), 0, "", "", [], true)); }
@@ -91,7 +88,7 @@ public static class ContentInstallationInspector
         ? local.Hash.Length > 0 && local.Hash.Equals(file.Sha512, StringComparison.OrdinalIgnoreCase)
         : local.Sha1.Length > 0 && local.Sha1.Equals(file.Sha1, StringComparison.OrdinalIgnoreCase);
 
-    private static bool IdentityMatches(ContentFile file, Identity identity)
+    private static bool IdentityMatches(ContentFile file, ModMetadata identity)
     {
         var slug = Normalize(file.ProjectSlug.Length > 0 ? file.ProjectSlug : file.ProjectId);
         return (slug.Length >= 3 && Normalize(identity.Id) == slug)
@@ -106,43 +103,5 @@ public static class ContentInstallationInspector
         if (!File.Exists(path) || new FileInfo(path).Length > 1024 * 1024) return [];
         try { return JsonSerializer.Deserialize<List<ContentFile>>(File.ReadAllText(path)) ?? []; }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException) { return []; }
-    }
-    private static string Value(JsonNode? node, string name) => node?[name] is JsonValue value && value.TryGetValue<string>(out var text) ? text : "";
-    private static IReadOnlyList<Identity> ReadIdentities(string path)
-    {
-        var found = new List<Identity>();
-        try
-        {
-            using var archive = ZipFile.OpenRead(path);
-            string Read(string name)
-            {
-                var entry = archive.GetEntry(name);
-                if (entry is null || entry.Length > 1024 * 1024) return "";
-                using var reader = new StreamReader(entry.Open()); return reader.ReadToEnd();
-            }
-            foreach (var name in new[] { "fabric.mod.json", "quilt.mod.json", "mcmod.info" })
-            {
-                var text = Read(name); if (text.Length == 0) continue;
-                try
-                {
-                    var data = JsonNode.Parse(text);
-                    if (name == "quilt.mod.json") { var mod = data?["quilt_loader"]; found.Add(new(Value(mod, "id"), Value(mod?["metadata"], "name"), Value(mod, "version"))); }
-                    else if (name == "fabric.mod.json") found.Add(new(Value(data, "id"), Value(data, "name"), Value(data, "version")));
-                    else foreach (var mod in (data as JsonArray ?? data?["modList"] as JsonArray ?? []).OfType<JsonObject>()) found.Add(new(Value(mod, "modid"), Value(mod, "name"), Value(mod, "version")));
-                }
-                catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException) { }
-            }
-            foreach (var name in new[] { "META-INF/mods.toml", "META-INF/neoforge.mods.toml" })
-            {
-                var text = Read(name);
-                foreach (Match section in Regex.Matches(text, @"(?ms)^\s*\[\[mods\]\]\s*$(.*?)(?=^\s*\[|\z)"))
-                {
-                    string Field(string key) => Regex.Match(section.Groups[1].Value, @"(?m)^\s*" + key + "\\s*=\\s*[\"']([^\"'\\r\\n]*)[\"']").Groups[1].Value;
-                    found.Add(new(Field("modId"), Field("displayName"), Field("version")));
-                }
-            }
-        }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException) { }
-        return found;
     }
 }

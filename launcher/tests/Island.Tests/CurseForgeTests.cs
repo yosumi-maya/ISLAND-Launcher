@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
@@ -109,6 +110,8 @@ internal static class CurseForgeTests
         check(plan.TargetFiles.All(path => File.ReadAllBytes(path).SequenceEqual(payload)) && credentialPreserved,
             "CurseForge API and CDN requests retain the exact key and installed files pass SHA-1 verification");
 
+        await CheckPackDownloadFallbackAsync(directory, payload, hash, key, check);
+
         var redirectHeadersSafe = true;
         using var redirect = new DownloadClient(settings, new Handler(request =>
         {
@@ -156,5 +159,71 @@ internal static class CurseForgeTests
         check(!last.HasNext, "All sources stops exposing next pages at the shared catalog boundary");
 
     }
+
+    private static async Task CheckPackDownloadFallbackAsync(string directory, byte[] payload, string hash, string key, Action<bool, string> check)
+    {
+        const string filename = "immersive fixes+1.8.0.jar";
+        const string fileApiPath = "/v1/mods/files";
+        const string cdnPath = "/files/9181/462/immersive%20fixes%2B1.8.0.jar";
+        var archive = Path.Combine(directory, "manifest-fallback.zip");
+        using (var zip = ZipFile.Open(archive, ZipArchiveMode.Create))
+        using (var writer = new StreamWriter(zip.CreateEntry("manifest.json").Open()))
+            writer.Write("""{"manifestType":"minecraftModpack","manifestVersion":1,"name":"Fixture","minecraft":{"version":"1.20.1"},"files":[{"projectID":1326199,"fileID":9181462,"required":true},{"projectID":1001614,"fileID":5922047,"required":true}]}""");
+        var pack = await ModpackInstaller.InspectAsync(archive, default);
+        var settings = new AppSettings { CurseForgeApiKey = key, Source = DownloadSource.Official, ParallelDownloads = 1 };
+        var requests = new List<(string Host, string Path)>();
+        var metadataStatus = HttpStatusCode.OK;
+        using var network = new DownloadClient(settings, new Handler(request =>
+        {
+            var uri = request.RequestUri!;
+            requests.Add((uri.Host, uri.AbsolutePath));
+            check(request.Headers.GetValues("x-api-key").Single() == key, "CurseForge pack CDN requests keep the configured API credential");
+            if (uri.AbsolutePath == fileApiPath)
+            {
+                var body = JsonNode.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+                check(request.Method == HttpMethod.Post && body?["fileIds"]?.AsArray().Select(id => id!.GetValue<long>()).SequenceEqual([9181462L, 5922047L]) == true,
+                    "One batch metadata request sends both file IDs from the manifest");
+            }
+            return (uri.Host, uri.AbsolutePath) switch
+            {
+                ("api.curseforge.com", fileApiPath) when metadataStatus == HttpStatusCode.OK => Json(new JsonObject
+                {
+                    ["data"] = new JsonArray(new JsonObject
+                    {
+                        ["modId"] = 1326199, ["id"] = 9181462, ["isAvailable"] = true, ["fileName"] = filename,
+                        ["fileLength"] = payload.Length, ["downloadUrl"] = null,
+                        ["hashes"] = new JsonArray(new JsonObject { ["algo"] = 1, ["value"] = hash })
+                    },
+                    new JsonObject
+                    {
+                        ["modId"] = 1001614, ["id"] = 5922047, ["isAvailable"] = false, ["fileName"] = "lionfishapi-2.4-Fix.jar",
+                        ["fileLength"] = payload.Length, ["downloadUrl"] = "https://mediafilez.forgecdn.net/files/5922/47/lionfishapi-2.4-Fix.jar",
+                        ["hashes"] = new JsonArray(new JsonObject { ["algo"] = 1, ["value"] = hash })
+                    })
+                }),
+                ("api.curseforge.com", fileApiPath) => new(metadataStatus),
+                ("edge.forgecdn.net", cdnPath) => new(HttpStatusCode.ServiceUnavailable),
+                ("mediafilez.forgecdn.net", cdnPath or "/files/5922/47/lionfishapi-2.4-Fix.jar") => new(HttpStatusCode.OK) { Content = new ByteArrayContent(payload) },
+                _ => throw new InvalidOperationException("Unexpected CurseForge request: " + uri)
+            };
+        }));
+        var installer = new ModpackInstaller(settings, network);
+        var instance = Path.Combine(directory, "manifest-fallback");
+        await installer.ApplyAsync(pack, instance, null, default);
+        check(requests.SequenceEqual(new[] { ("api.curseforge.com", fileApiPath),
+                ("edge.forgecdn.net", cdnPath), ("mediafilez.forgecdn.net", cdnPath),
+                ("mediafilez.forgecdn.net", "/files/5922/47/lionfishapi-2.4-Fix.jar") })
+            && File.ReadAllBytes(Path.Combine(instance, "mods", filename)).SequenceEqual(payload)
+            && File.ReadAllBytes(Path.Combine(instance, "mods", "lionfishapi-2.4-Fix.jar")).SequenceEqual(payload),
+            "CurseForge manifests use CDN fallbacks for missing links and honor an explicit link for an archived file");
+
+        metadataStatus = HttpStatusCode.Unauthorized;
+        requests.Clear();
+        var unauthorized = false;
+        try { await installer.ApplyAsync(pack, Path.Combine(directory, "unauthorized"), null, default); }
+        catch (CurseForgeRequestException ex) when (ex.Status == HttpStatusCode.Unauthorized) { unauthorized = true; }
+        check(unauthorized && requests.Count == 1, "A rejected CurseForge key is reported without making CDN requests");
+    }
+
     private static HttpResponseMessage Json(JsonObject value) => new(HttpStatusCode.OK) { Content = new StringContent(value.ToJsonString()) };
 }
