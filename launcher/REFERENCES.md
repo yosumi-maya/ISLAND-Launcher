@@ -1,22 +1,19 @@
 # 参考与第三方说明
 
-## 0.10.20 UI 检查依据
 
-- 使用本机安装的 frontend-design、ui-ux-pro-max、web-design-guidelines 作为设计与检查指引，没有引入其作为运行依赖。设计说明见 `design-polish.md`。
-- [Web Interface Guidelines](https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md)：查阅当前焦点、交互反馈、空态、异步状态与内容可读性规则，将适用规则映射为 WPF 控件、资源与 AutomationProperties，没有在启动器内引入网页或浏览器。
 
-## 0.10.18 Modrinth 资源下载
+##Modrinth 资源下载
 
 - [搜索项目](https://docs.modrinth.com/api/operations/searchprojects/)：使用 `project_type:mod` / `shader` / `resourcepack`、版本与加载器的 AND facets，以及排序和分页。
 - [项目发布列表](https://docs.modrinth.com/api/operations/getprojectversions/)、[单个发布与依赖](https://docs.modrinth.com/api/operations/getversion/)：按实例匹配游戏版本与加载器，解析 required / incompatible 依赖及文件 SHA-1 / SHA-512，使用 HTTPS 下载链接。下载资源与图标来自用户选择的第三方项目，不包含在启动器发布包中。
 
-## 0.10.14 Microsoft 登录
+## Microsoft 登录
 
 - [Microsoft 授权码协议](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow)：公共桌面客户端使用 PKCE S256、state 与授权码兑换，不在应用内保存 client_secret。
 - [Microsoft 本机回调规则](https://learn.microsoft.com/en-us/entra/identity-platform/reply-url#localhost-exceptions)：Mobile and desktop 平台的 `http://localhost` 回调及随机端口匹配。
 - HMCL 源码核对：[OAuth](https://github.com/HMCL-dev/HMCL/blob/0874c98d215fa271630c5934e7de04651cee30f7/HMCLCore/src/main/java/org/jackhuang/hmcl/auth/OAuth.java)、[OAuthServer](https://github.com/HMCL-dev/HMCL/blob/0874c98d215fa271630c5934e7de04651cee30f7/HMCL/src/main/java/org/jackhuang/hmcl/game/OAuthServer.java)、[MicrosoftService](https://github.com/HMCL-dev/HMCL/blob/0874c98d215fa271630c5934e7de04651cee30f7/HMCLCore/src/main/java/org/jackhuang/hmcl/auth/microsoft/MicrosoftService.java)。确认双登录方式、PKCE、Xbox 用户一致性，以及先查询 entitlements 再验证 Java profile 的顺序。本项目依据公开协议独立实现 C#，没有复制 HMCL 的 GPL 代码、网页或应用凭据。
 
-## 0.10.11 HMCL 参数兼容
+## HMCL 参数兼容
 
 - [HMCL DefaultLauncher](https://github.com/HMCL-dev/HMCL/blob/main/HMCLCore/src/main/java/org/jackhuang/hmcl/launch/DefaultLauncher.java)、[LaunchManifestNormalizer](https://github.com/HMCL-dev/HMCL/blob/main/HMCLCore/src/main/java/org/jackhuang/hmcl/game/LaunchManifestNormalizer.java)：核对 `${primary_jar_name}` 表示实际客户端 JAR 文件名，以及它被加入 Forge `ignoreList` 的含义。本项目自行在已有占位符字典中实现展开，没有复制 HMCL 源码。GTOCore 的 Java 要求从用户本机已启用 JAR 的实际入口类字节码读取；不分发用户的整合包、模组或配置。
 
@@ -47,7 +44,7 @@
 - [System Informer phnt 的 Windows NT 接口定义](https://github.com/winsiderss/systeminformer/blob/master/phnt/include/ntexapi.h)：核对 SystemMemoryListInformation = 80、MemoryEmptyWorkingSets = 2、MemoryPurgeStandbyList = 4，以及所需 SeProfileSingleProcessPrivilege。独立编写 C# 声明，未内置或复制其清理程序；接口属于 Windows 内部 API，失败时记录并跳过。
 - [Microsoft AdjustTokenPrivileges](https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-adjusttokenprivileges)：仅在短时辅助进程启用已有权限，并检查 ERROR_NOT_ALL_ASSIGNED；不更改用户权限策略。
 
-## 0.10.6 启动选项与内置兼容组件
+## 启动选项与内置兼容组件
 
 - [Oracle Java 15 迁移说明](https://docs.oracle.com/en/java/javase/15/migrate/index.html)、[Java 21 收集器](https://docs.oracle.com/en/java/javase/21/gctuning/available-collectors.html)、[Java 23 ZGC](https://docs.oracle.com/en/java/javase/23/gctuning/z-garbage-collector.html)、[Java 24 ZGC](https://docs.oracle.com/en/java/javase/24/gctuning/z-garbage-collector.html)：核对 ZGC 可用版本、分代模式默认值及已删除的旧标志。GC 选择与版本回退逻辑由本项目独立实现。
 - [Java 8 参数说明](https://docs.oracle.com/javase/8/docs/technotes/tools/windows/java.html)：核对 G1、暂停目标与 ParallelRefProcEnabled；调优预设不宣称对所有游戏均有性能提升。
@@ -57,7 +54,7 @@
 - [Java Launch Wrapper 1.4.4](https://github.com/00ll00/java_launch_wrapper)：MIT，Copyright (c) 2022 00ll00。内置官方发行文件 `java_launch_wrapper-1.4.4.jar`，SHA256 `88eb3ee58854e916437831697ef6a2fd493da9bc4ffb018f620cd88f090952aa`。用于受 Windows UTF-8 代码页问题影响的旧 Java；Java 19 起不自动注入。完整许可位于 `third-party/JAVA-LAUNCH-WRAPPER-LICENSE.txt`，发布包与释放目录附带许可。
 - [LWJGL Unsafe Agent 2.0](https://github.com/HMCL-dev/lwjgl-unsafe-agent/releases/tag/2.0)、[上游说明](https://github.com/HMCL-dev/lwjgl-unsafe-agent)：Apache-2.0，Copyright 2026 Glavo。内置官方 `lwjgl-unsafe-agent-2.0.jar`，SHA256 `6c07d3508dc090a12076876bdc227a19ce195a41c9e2c6535c3f82213b1b2015`。仅用于匹配的 Java 25+ / LWJGL 版本；参考 [Forge 兼容问题](https://github.com/Meloong-Git/PCL/issues/8399)，不向 Forge 配置自动注入。完整许可位于 `third-party/LWJGL-UNSAFE-AGENT-LICENSE.txt`，发布包与释放目录附带许可。
 
-## 0.10.8 GTNH / Cleanroom 兼容核对
+##GTNH / Cleanroom 兼容核对
 
 - [GTNH 官方 FAQ](https://www.gtnewhorizons.com/faq/)、[LWJGL3ify 官方说明](https://github.com/GTNewHorizons/lwjgl3ify/blob/master/README.MD)：核对现代 Java、RetroFuturaBootstrap 系统类加载器及随补丁提供的 JVM 参数。启动器保留用户已安装版本中的参数，不套用其他版本整合包的固定参数。
 - [Prism VersionFile](https://github.com/PrismLauncher/PrismLauncher/blob/develop/launcher/minecraft/VersionFile.cpp)、[Prism PackProfile](https://github.com/PrismLauncher/PrismLauncher/blob/develop/launcher/minecraft/PackProfile.cpp)：参考组件、库与启动参数组成的使用方式，未复制其 C++ 实现。
