@@ -1,12 +1,12 @@
 # ISLAND 岛屿启动器
 
-完全免费的 Windows Minecraft Java 版启动器，使用 .NET 8 / WPF。当前版本 **1.1.0 正式版**。
+完全免费的 Windows Minecraft Java 版启动器，使用 .NET 8 / WPF。当前版本 **1.2.0 正式版**。
 
-[下载正式版](https://github.com/yosumi-maya/ISLAND-Launcher/releases/tag/v1.1.0) · [问题反馈](https://github.com/yosumi-maya/ISLAND-Launcher/issues)
+[下载正式版](https://github.com/yosumi-maya/ISLAND-Launcher/releases/tag/v1.2.0) · [问题反馈](https://github.com/yosumi-maya/ISLAND-Launcher/issues)
 
 ## 下载
 
-在 Releases 下载 **IslandLauncher-1.1.0-win-x64.exe** 后直接运行，或者下载 ZIP 并解压其中的同一个 EXE。支持 Windows x64，无需另装 .NET。游戏所需 Java 可由启动器自动下载。
+在 Releases 下载 **岛屿启动器.exe** 后直接运行。支持 Windows x64，无需另装 .NET。游戏所需 Java 可由启动器自动下载。
 
 ## 功能
 

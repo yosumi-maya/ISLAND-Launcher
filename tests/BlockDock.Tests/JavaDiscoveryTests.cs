@@ -107,9 +107,12 @@ internal static class JavaDiscoveryTests
             {
                 var caseRoot = Path.Combine(root, "modern-java-" + kind);
                 var java = JavaProbeFixture.Create(Path.Combine(caseRoot, "runtime"));
-                var game = Path.Combine(caseRoot, "game"); var work = Path.Combine(caseRoot, "work"); Directory.CreateDirectory(work);
+                var game = Path.Combine(caseRoot, "game [mods] {ROOT}"); var work = Path.Combine(caseRoot, "work"); Directory.CreateDirectory(work);
                 var jar = Path.Combine(caseRoot, "installer.jar");
-                var profile = new JsonObject { ["minecraft"] = "1.21.1", ["spec"] = 1, ["json"] = "/version.json", ["processors"] = new JsonArray(new JsonObject { ["jar"] = "test:processor:1", ["args"] = new JsonArray("fixture argument with spaces") }) };
+                var profile = new JsonObject { ["minecraft"] = "1.21.1", ["spec"] = 1, ["json"] = "/version.json", ["processors"] = new JsonArray(new JsonObject { ["jar"] = "test:processor:1", ["args"] = new JsonArray("{ROOT}/fixture argument with spaces") }) };
+                const string runtimeJar = "test/runtime/1/runtime-1.jar";
+                if (kind == LoaderKind.NeoForge)
+                    profile["data"] = JsonNode.Parse("""{"PATCHED":{"client":"[test:runtime:1]"}}""");
                 using (var processor = new MemoryStream())
                 {
                     using (var embedded = new System.IO.Compression.ZipArchive(processor, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
@@ -117,16 +120,33 @@ internal static class JavaDiscoveryTests
                     using var installer = System.IO.Compression.ZipFile.Open(jar, System.IO.Compression.ZipArchiveMode.Create);
                     await using (var writer = new StreamWriter(installer.CreateEntry("install_profile.json").Open())) await writer.WriteAsync(profile.ToJsonString());
                     await using (var writer = new StreamWriter(installer.CreateEntry("version.json").Open())) await writer.WriteAsync("""{"id":"modern","javaVersion":{"majorVersion":21},"libraries":[]}""");
-                    await using var entry = installer.CreateEntry("maven/test/processor/1/processor-1.jar").Open(); await entry.WriteAsync(processor.ToArray());
+                    await using (var entry = installer.CreateEntry("maven/test/processor/1/processor-1.jar").Open())
+                        await entry.WriteAsync(processor.ToArray());
+                    if (kind == LoaderKind.NeoForge)
+                    {
+                        await using var entry = installer.CreateEntry("maven/" + runtimeJar).Open();
+                        await entry.WriteAsync(processor.ToArray());
+                    }
                 }
                 var bytes = await File.ReadAllBytesAsync(jar);
                 var settings = new AppSettings { GameDirectory = game, JavaPath = java };
                 using var network = new DownloadClient(settings, new FakeHandler(request => request.RequestUri!.AbsolutePath.EndsWith(".sha1")
                     ? new(System.Net.HttpStatusCode.OK) { Content = new StringContent(Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(bytes))) }
                     : new(System.Net.HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) }));
-                var result = await new ForgeInstaller(settings, network).InstallAsync(new("1.21.1", "Modern", kind, "test"), new(), work, null, default);
+                var request = new InstallRequest("1.21.1", "Modern", kind, "test");
+                var forge = new ForgeInstaller(settings, network);
+                var result = await forge.InstallAsync(request, new(), work, null, default);
                 var args = System.Text.Json.JsonSerializer.Deserialize<string[]>(await File.ReadAllTextAsync(Path.Combine(Path.GetDirectoryName(java)!, "processor-args.json")))!;
-                Check(result["id"]!.GetValue<string>() == "modern" && args[^2] == "fixture.Main" && args[^1] == "fixture argument with spaces", "应把经过版本检查的 Java 路径用于实际处理器，并正确传递带空格的参数");
+                Check(result["id"]!.GetValue<string>() == "modern" && args[^2] == "fixture.Main" && args[^1] == game + "/fixture argument with spaces",
+                    "应保留处理器路径中的空格、方括号和花括号");
+                if (kind == LoaderKind.NeoForge)
+                {
+                    Check(result["islandGeneratedLibraries"]?[0].Str("path") == runtimeJar, "安装结果记录无官方哈希的补丁客户端");
+                    var cached = (await forge.ReadCachedGeneratedLibrariesAsync(request, default)).Single();
+                    Check(cached.Sha1 is null && await ForgeInstaller.ValidLocalLibraryAsync(cached, default), "从缓存安装器恢复无哈希补丁客户端的描述");
+                    await File.WriteAllTextAsync(cached.Path, "damaged");
+                    Check(!await ForgeInstaller.ValidLocalLibraryAsync(cached, default), "拒绝非空但无法读取的补丁客户端 JAR");
+                }
             }
         }));
     }

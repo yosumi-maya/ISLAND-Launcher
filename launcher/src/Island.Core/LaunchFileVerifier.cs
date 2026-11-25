@@ -8,6 +8,12 @@ namespace Island.Core;
 // and the expected metadata all remain unchanged. Modified files are rechecked.
 public sealed class LaunchFileVerifier : IAsyncDisposable
 {
+    internal sealed class InvalidLocalFile(string path) : IOException(
+        $"本地依赖缺失或损坏：{Path.GetFileName(path)}。请重新安装对应加载器，或从原始整合包重新导入。")
+    {
+        internal string FilePath { get; } = path;
+    }
+
     public sealed record Stamp(long Length, long Modified, string Expected);
     private readonly string root, cachePath;
     private readonly DownloadClient network;
@@ -46,18 +52,24 @@ public sealed class LaunchFileVerifier : IAsyncDisposable
             lock (hitLock) CacheHits++;
             return;
         }
-        await network.DownloadAsync(file, token);
+        if (file.Urls.All(string.IsNullOrWhiteSpace))
+        {
+            if (ReadStamp() is null || !await ForgeInstaller.ValidLocalLibraryAsync(file, token))
+                throw new InvalidLocalFile(file.Path);
+        }
+        else await network.DownloadAsync(file, token);
         if (hasHash && ReadStamp() is { } stamp && entries.Count < 100000) { entries[relative] = stamp; Interlocked.Exchange(ref changed, 1); }
     }
 
     public async Task EnsureManyAsync(IEnumerable<TransferFile> files, string stage, IProgress<InstallProgress>? progress, CancellationToken token)
     {
-        var list = files.DistinctBy(file => Path.GetFullPath(file.Path), StringComparer.OrdinalIgnoreCase).ToArray();
+        var list = files.GroupBy(file => Path.GetFullPath(file.Path), StringComparer.OrdinalIgnoreCase).ToArray();
         var done = 0;
-        await Parallel.ForEachAsync(list, new ParallelOptions { MaxDegreeOfParallelism = 8, CancellationToken = token }, async (file, ct) =>
+        await Parallel.ForEachAsync(list, new ParallelOptions { MaxDegreeOfParallelism = 8, CancellationToken = token }, async (group, ct) =>
         {
-            await EnsureAsync(file, ct);
-            progress?.Report(new(stage, Path.GetFileName(file.Path), Interlocked.Increment(ref done), list.Length));
+            foreach (var file in group)
+                await EnsureAsync(file, ct);
+            progress?.Report(new(stage, Path.GetFileName(group.Key), Interlocked.Increment(ref done), list.Length));
         });
     }
 

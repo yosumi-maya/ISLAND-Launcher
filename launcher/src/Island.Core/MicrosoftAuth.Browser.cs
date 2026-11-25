@@ -6,15 +6,19 @@ public sealed partial class MicrosoftAuth
 {
     public BrowserLogin BeginBrowserLogin(string clientId) => new(clientId, Authority, Scope);
 
-    public async Task<AuthResult> CompleteBrowserAsync(BrowserLogin login, CancellationToken token)
+    public Task<AuthResult> CompleteBrowserAsync(BrowserLogin login, CancellationToken token)
+        => CompleteBrowserAsync(login, token, null);
+
+    public async Task<AuthResult> CompleteBrowserAsync(BrowserLogin login, CancellationToken token, Action? onAuthorizationReceived)
     {
         var code = await login.WaitForCodeAsync(token).ConfigureAwait(false);
+        onAuthorizationReceived?.Invoke();
         using var content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["client_id"] = login.ClientId, ["grant_type"] = "authorization_code", ["code"] = code,
             ["redirect_uri"] = login.RedirectUri.AbsoluteUri, ["code_verifier"] = login.CodeVerifier, ["scope"] = Scope
         });
-        using var response = await http.PostAsync(Authority + "token", content, token).ConfigureAwait(false);
+        using var response = await PostLoginAsync(Authority + "token", content, token).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             // Do not surface the response body: it can contain user identifiers and OAuth credentials.

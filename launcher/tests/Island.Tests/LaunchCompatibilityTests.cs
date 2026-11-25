@@ -43,6 +43,17 @@ internal static class LaunchCompatibilityTests
                 "A real JVM receives the complete Unicode / spaced primary JAR in its system property and game arguments");
         }
         finally { await GameLauncher.CleanupNativesAsync(root, plan.NativesDirectory); }
+        metadata["arguments"]!["jvm"] = new JsonArray("-DignoreList=bootstraplauncher,${version_name}.jar");
+        metadata["arguments"]!["game"] = new JsonArray("--version", "${version_name}");
+        File.WriteAllText(Path.Combine(directory, child + ".json"), metadata.ToJsonString());
+        plan = GameLauncher.Prepare(root, VersionProfile.Read(root, child), java.Path, 512, identity, javaMajor: java.Major);
+        try
+        {
+            check(plan.Arguments.Contains("-DignoreList=bootstraplauncher," + child + ".jar," + Path.GetFileName(fixture.ClientJar)) &&
+                plan.Arguments.TakeLast(2).SequenceEqual(new[] { "--version", child }),
+                "Forge installer metadata ignores the inherited client JAR while preserving the selected game version name");
+        }
+        finally { await GameLauncher.CleanupNativesAsync(root, plan.NativesDirectory); }
         var standaloneProfile = fixture.Profile.DeepClone().AsObject();
         standaloneProfile["arguments"]!["jvm"] = new JsonArray("-DignoreList=${primary_jar_name}");
         plan = GameLauncher.Prepare(root, fixture with { Profile = standaloneProfile }, java.Path, 512, identity, javaMajor: java.Major);
@@ -53,8 +64,180 @@ internal static class LaunchCompatibilityTests
         catch (InvalidDataException) { check(true, "Unknown placeholders still fail clearly instead of silently dropping loader configuration"); }
     }
 
+    public static async Task VerifyLongClassPathAsync(string root, ResolvedVersion fixture, JavaInstallation java,
+        JavaInstallation? legacyJava, Action<bool, string> check)
+    {
+        var profile = fixture.Profile.DeepClone().AsObject();
+        var libraries = profile.Array("libraries");
+        for (var i = 0; i < 230; i++)
+        {
+            var library = new JsonObject { ["name"] = "test." + new string('a', 70) + $":dependency{i}:1" };
+            libraries.Add(library);
+            var path = LaunchLibraries.PathFor(root, library);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            using var emptyJar = ZipFile.Open(path, ZipArchiveMode.Create);
+        }
+        const string option = "中文 参数 \"quoted\" C:\\mods\\";
+        profile["arguments"]!["jvm"] = new JsonArray("-Disland.test.option=" + option);
+        const string accessToken = "temporary-auth-fixture-secret";
+        var identity = new LaunchIdentity("Fixture", new string('0', 32), accessToken, true);
+        foreach (var runtime in new[] { java, legacyJava }.OfType<JavaInstallation>().DistinctBy(runtime => runtime.Path))
+        {
+            var plan = GameLauncher.Prepare(root, fixture with { Profile = profile }, runtime.Path, 512, identity, javaMajor: runtime.Major);
+            try
+            {
+                check(plan.Arguments.Any(argument => argument.Length > 32_767) &&
+                    plan.StartInfo.ArgumentList.All(argument => argument.Length < 1024), $"Java {runtime.Major} launch keeps the Windows command line short");
+                if (runtime.Major >= 9)
+                    check(Directory.GetFiles(plan.NativesDirectory, "*.args").Length == 1 &&
+                        Directory.GetFiles(plan.NativesDirectory, "*.args").All(path => !File.ReadAllText(path).Contains(accessToken)),
+                        "Long JVM options use an argument file without writing the game access token");
+                else
+                    check(Directory.GetFiles(plan.NativesDirectory, "class-path-*.jar").Length == 1, "Java 8 uses a local classpath manifest");
+                using var process = Process.Start(plan.StartInfo)!;
+                var stdout = process.StandardOutput.ReadToEndAsync();
+                var stderr = process.StandardError.ReadToEndAsync();
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+                try { await process.WaitForExitAsync(timeout.Token); }
+                catch { if (!process.HasExited) process.Kill(true); throw; }
+                var output = await stdout + await stderr;
+                var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(option));
+                if (process.ExitCode != 0 || !output.Contains("ISLAND_JVM_STARTED") || !output.Contains("CUSTOM_BASE64=" + encoded) ||
+                    !output.Contains("ARG=" + accessToken))
+                    throw new Exception($"Long classpath fixture failed on Java {runtime.Major} (exit {process.ExitCode}): {output}");
+                check(true, $"Java {runtime.Major} loads the last JAR and preserves Unicode, quoted flags and game arguments");
+            }
+            finally { await GameLauncher.CleanupNativesAsync(root, plan.NativesDirectory); }
+        }
+    }
+
+    private static async Task VerifyClientAndLoaderRepairAsync(string root, Action<bool, string> check)
+    {
+        var game = Path.Combine(root, "repair-launch-jars");
+        string WriteVersion(string id, JsonObject profile)
+        {
+            var directory = Path.Combine(game, "versions", id);
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(Path.Combine(directory, id + ".json"), profile.ToJsonString());
+            return Path.Combine(directory, id + ".jar");
+        }
+        var vanilla = Encoding.UTF8.GetBytes("original client");
+        var altered = Encoding.UTF8.GetBytes("patched client!");
+        JsonObject Artifact(byte[] bytes, string url) => new()
+        {
+            ["url"] = url, ["size"] = bytes.LongLength, ["sha1"] = Convert.ToHexString(SHA1.HashData(bytes))
+        };
+        const string minecraft = "1.20.1";
+        var original = WriteVersion(minecraft, new JsonObject
+        {
+            ["id"] = minecraft, ["mainClass"] = "Fixture",
+            ["downloads"] = new JsonObject { ["client"] = Artifact(vanilla, "https://fixture.test/client") }
+        });
+        var alternative = WriteVersion("alternate", new JsonObject());
+        File.WriteAllBytes(original, altered);
+        File.WriteAllBytes(alternative, altered);
+        WriteVersion("custom", new JsonObject { ["inheritsFrom"] = minecraft, ["jar"] = "alternate" });
+        WriteVersion("explicit-base", new JsonObject { ["inheritsFrom"] = minecraft, ["jar"] = minecraft });
+        var handler = new FixtureHandler(vanilla);
+        var settings = new AppSettings { GameDirectory = game, Source = DownloadSource.Official };
+        using var network = new DownloadClient(settings, handler);
+        await GameLauncher.RepairAsync(game, VersionProfile.Read(game, "custom"), network, null, default);
+        check(handler.Requests == 0 && File.ReadAllBytes(alternative).SequenceEqual(altered), "Inherited download metadata cannot overwrite a selected custom client");
+        await GameLauncher.RepairAsync(game, VersionProfile.Read(game, "explicit-base"), network, null, default);
+        check(handler.Requests == 1 && File.ReadAllBytes(original).SequenceEqual(vanilla), "An explicit reference to the original client still repairs it with its own descriptor");
+
+        const string id = "forge-fixture";
+        const string loaderVersion = "47.4.10";
+        var generated = Artifact(vanilla, "");
+        var loaderLibrary = new JsonObject
+        {
+            ["name"] = $"net.minecraftforge:forge:{minecraft}-{loaderVersion}:client",
+            ["downloads"] = new JsonObject { ["artifact"] = generated }
+        };
+        var child = new JsonObject { ["inheritsFrom"] = minecraft, ["libraries"] = new JsonArray(loaderLibrary) };
+        var jar = LaunchLibraries.PathFor(game, loaderLibrary);
+        Directory.CreateDirectory(Path.GetDirectoryName(jar)!);
+        File.WriteAllBytes(jar, altered);
+        var marker = Path.Combine(Path.GetDirectoryName(WriteVersion(id, child))!, "blockdock-instance.json");
+        var resolved = VersionProfile.Read(game, id);
+        try
+        {
+            await GameLauncher.RepairAsync(game, resolved, network, null, default);
+            throw new Exception("Damaged imported loader JAR passed validation.");
+        }
+        catch (LaunchFileVerifier.InvalidLocalFile error)
+        {
+            check(error.FilePath == jar && handler.Requests == 1, "A corrupt local loader JAR stops preparation without fetching an unrelated file");
+        }
+
+        File.WriteAllText(marker, $$"""{"minecraft":"{{minecraft}}","loader":"Forge","loaderVersion":"{{loaderVersion}}"}""");
+        using var buffer = new MemoryStream();
+        using (var archive = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            void Entry(string name, byte[] bytes) { using var stream = archive.CreateEntry(name).Open(); stream.Write(bytes); }
+            var coordinate = loaderLibrary.Str("name");
+            var hash = generated.Str("sha1");
+            Entry("install_profile.json", Encoding.UTF8.GetBytes($$"""
+                {"spec":1,"minecraft":"{{minecraft}}","json":"/version.json",
+                 "data":{"PATCHED":{"client":"[{{coordinate}}]"},"PATCHED_SHA":{"client":"'{{hash}}'"} } }
+                """));
+            Entry("version.json", Encoding.UTF8.GetBytes(child.ToJsonString()));
+            Entry("maven/" + SafePaths.Maven(loaderLibrary.Str("name")), vanilla);
+        }
+        var installer = new InstallerHandler(buffer.ToArray());
+        using var installerNetwork = new DownloadClient(settings, installer);
+        await GameLauncher.RepairAsync(game, resolved, installerNetwork, null, default);
+        check(installer.Downloads == 1 && File.ReadAllBytes(jar).SequenceEqual(vanilla), "An installed Forge instance restores a damaged dependency from its original installer");
+        await GameLauncher.RepairAsync(game, resolved, installerNetwork, null, default);
+        check(installer.Downloads == 1, "A verified loader dependency does not run the installer again");
+
+        child.Remove("libraries");
+        WriteVersion(id, child);
+        File.WriteAllBytes(jar, []);
+        await GameLauncher.RepairAsync(game, VersionProfile.Read(game, id), installerNetwork, null, default);
+        check(installer.Downloads == 1 && File.ReadAllBytes(jar).SequenceEqual(vanilla),
+            "A cached installer restores a processor output omitted from the launch profile");
+
+        var cacheDirectory = Path.Combine(game, ".blockdock", "cache", "installers");
+        var installerName = $"forge-{minecraft}-{loaderVersion}-installer.jar";
+        File.Move(Path.Combine(cacheDirectory, "forge", installerName), Path.Combine(cacheDirectory, installerName));
+        var forge = new ForgeInstaller(settings, installerNetwork);
+        var request = new InstallRequest(minecraft, id, LoaderKind.Forge, loaderVersion);
+        check((await forge.ReadCachedGeneratedLibrariesAsync(request, default)).Single().Path == jar &&
+            (await forge.ReadCachedGeneratedLibrariesAsync(request with { Loader = LoaderKind.NeoForge }, default)).Count == 0,
+            "The old shared installer cache is used only when its Maven group matches the loader");
+
+        var duplicate = Path.Combine(game, "duplicate.jar");
+        using (var archive = ZipFile.Open(duplicate, ZipArchiveMode.Create))
+        {
+            using var writer = new StreamWriter(archive.CreateEntry("fixture.txt").Open());
+            writer.Write("structurally valid but incorrect JAR");
+        }
+        await using var verifier = new LaunchFileVerifier(game, installerNetwork);
+        try
+        {
+            await verifier.EnsureManyAsync([new(duplicate, []), new(duplicate, [], Sha1: generated.Str("sha1"))], "", null, default);
+            throw new Exception("A hashless duplicate masked the generated library checksum.");
+        }
+        catch (LaunchFileVerifier.InvalidLocalFile error)
+        {
+            check(error.FilePath == duplicate, "A duplicate local library descriptor cannot hide the generated file checksum");
+        }
+
+        var legacy = JsonNode.Parse("""
+            {"mainClass":"net.minecraft.launchwrapper.Launch","libraries":[
+              {"name":"net.minecraftforge:forge:1.7.10-10.13.4.1614-1.7.10","url":"https://maven.minecraftforge.net/"}
+            ]}
+            """)!.AsObject();
+        var legacyFile = LaunchLibraries.Files(game, legacy).Single();
+        check(legacyFile.Urls.Count == 2 && legacyFile.Urls[1].EndsWith("-universal.jar") &&
+            Path.GetFileName(legacyFile.Path) == Path.GetFileName(new Uri(legacyFile.Urls[0]).AbsolutePath),
+            "Legacy Forge can download the universal JAR into the path used by its launch configuration");
+    }
+
     public static async Task RunAsync(string root, Action<bool, string> check)
     {
+        await VerifyClientAndLoaderRepairAsync(root, check);
         var modRoot = Path.Combine(root, "mod-java-requirement");
         var modInstance = Path.Combine(modRoot, "versions", "Odyssey"); var mods = Path.Combine(modInstance, "mods"); Directory.CreateDirectory(mods);
         File.WriteAllText(Path.Combine(modInstance, "Odyssey.json"), """{"mainClass":"Main","javaVersion":{"majorVersion":17}}""");
@@ -121,5 +304,19 @@ internal static class LaunchCompatibilityTests
         public byte[] Bytes = bytes; public int Requests;
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         { Requests++; return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(Bytes) }); }
+    }
+
+    private sealed class InstallerHandler(byte[] bytes) : HttpMessageHandler
+    {
+        public int Downloads { get; private set; }
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var uri = request.RequestUri!;
+            if (uri.Host != "maven.minecraftforge.net") throw new InvalidOperationException("Unexpected repair download: " + uri);
+            if (uri.AbsolutePath.EndsWith(".sha1", StringComparison.Ordinal))
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(Convert.ToHexString(SHA1.HashData(bytes))) });
+            Downloads++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) });
+        }
     }
 }

@@ -28,7 +28,7 @@ public partial class MainWindow
                 if (operation is null && game is null) StatusLabel.Text = "●  已安装：" + task.Name;
             }
             catch (Exception ex) { Log("下载已完成，刷新实例列表失败：" + ex.Message); }
-        }, service ?? new LauncherDownloads(cacheDirectory: store.DirectoryPath), queue, () => operation is null && game is null, contentService,
+        }, service ?? new LauncherDownloads(cacheDirectory: store.DirectoryPath), queue, () => operation is null || game is { HasExited: false }, contentService,
             () => cards.Select(card => new ContentTarget(card.GameDirectory, card.Id,
                 card.DisplayName + " · " + card.FolderName, card.Instance.Minecraft, card.Instance.Loader, card.RuntimeDirectory, card.Isolation)).ToArray(),
             () => Selected?.Key);
@@ -51,7 +51,7 @@ public partial class MainWindow
         PreviewDrop += DropArchive;
         Deactivated += (_, _) => ArchiveDropHint.Visibility = Visibility.Collapsed;
     }
-    private bool CanDropArchive => ready && operation is null && game is null && DownloadCenterView.CanImportArchive;
+    private bool CanDropArchive => ready && DownloadCenterView.CanImportArchive;
     private static string? DroppedArchive(IDataObject data)
     {
         if (!data.GetDataPresent(DataFormats.FileDrop) || data.GetData(DataFormats.FileDrop) is not string[] { Length: 1 } files) return null;

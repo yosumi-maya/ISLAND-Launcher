@@ -161,8 +161,8 @@ try
     }
 
     // Execute a real JVM through the launch plan, using a tiny local fixture instead of a Minecraft account.
-    var java = (await JavaDiscovery.DiscoverAsync(JavaSearchPaths.ForGameDirectory(root, ""), CancellationToken.None))
-        .First(j => j.Is64Bit && File.Exists(Path.Combine(Path.GetDirectoryName(j.Path)!, "javac.exe")));
+    var discoveredJava = await JavaDiscovery.DiscoverAsync(JavaSearchPaths.ForGameDirectory(root, ""), CancellationToken.None);
+    var java = discoveredJava.First(j => j.Is64Bit && File.Exists(Path.Combine(Path.GetDirectoryName(j.Path)!, "javac.exe")));
     var javac = Path.Combine(Path.GetDirectoryName(java.Path)!, "javac.exe");
     if (!File.Exists(javac)) throw new Exception("Runtime test needs a JDK with javac.exe");
     var javaSource = Path.Combine(root, "IslandLaunchFixture.java");
@@ -180,13 +180,17 @@ try
             }
         }
         """);
-    var compileInfo = new ProcessStartInfo(javac) { UseShellExecute = false, CreateNoWindow = true }; compileInfo.ArgumentList.Add(javaSource);
+    var compileInfo = new ProcessStartInfo(javac) { UseShellExecute = false, CreateNoWindow = true };
+    if (java.Major >= 9) { compileInfo.ArgumentList.Add("--release"); compileInfo.ArgumentList.Add("8"); }
+    compileInfo.ArgumentList.Add(javaSource);
     using (var compile = Process.Start(compileInfo)!) { await compile.WaitForExitAsync(); Check(compile.ExitCode == 0, "Compile real Java fixture"); }
     var fixtureId = "本地启动 测试";
     Write(fixtureId, Parse("""{"id":"本地启动 测试","mainClass":"IslandLaunchFixture","arguments":{"game":["--username","${auth_player_name}","--gameDir","${game_directory}","--accessToken","${auth_access_token}",{"rules":[{"action":"allow","features":{"is_demo_user":true}}],"value":"--demo"}]}}"""));
     using (var zip = ZipFile.Open(Path.Combine(root, "versions", fixtureId, fixtureId + ".jar"), ZipArchiveMode.Create)) zip.CreateEntryFromFile(Path.Combine(root, "IslandLaunchFixture.class"), "IslandLaunchFixture.class");
     var fixture = VersionProfile.Read(root, fixtureId);
     await LaunchCompatibilityTests.VerifyRuntimeAsync(root, fixture, java, new("TestPlayer", offline.Uuid, "0", false), Check);
+    await LaunchCompatibilityTests.VerifyLongClassPathAsync(root, fixture, java,
+        discoveredJava.FirstOrDefault(runtime => runtime.Is64Bit && runtime.Major == 8), Check);
     await LaunchOptionsTests.VerifyRuntimeAsync(root, fixture, java, new("TestPlayer", offline.Uuid, "0", false), Check);
     try { await LauncherJava.ResolveAsync(new() { GameDirectory = root, JavaPath = java.Path }, new(999), new(), CancellationToken.None); throw new Exception("Incompatible Java accepted"); }
     catch (InvalidOperationException) { Check(true, "Compatibility checking rejects a manually selected Java below the metadata requirement"); }

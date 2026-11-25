@@ -85,7 +85,7 @@ public partial class DownloadCenter
     {
         if (ContentTargetBox.SelectedItem is not ContentTarget target) { SetCatalogStatus("请先创建或导入实例，再选择安装目标。"); return; }
         if (target.Minecraft == "未知版本") { SetCatalogStatus("无法识别目标实例的 Minecraft 版本，请检查或重新导入该实例。"); return; }
-        if (!canInstall()) { SetCatalogStatus("请等待当前启动任务或游戏结束后再安装资源。"); return; }
+        if (!canInstall()) { SetCatalogStatus("请等待当前任务结束后再安装资源。"); return; }
         var filter = ReadContentFilter() with { Minecraft = target.Minecraft, Loader = contentKind == ContentKind.Mod ? target.ModLoader : contentKind == ContentKind.Shader ? ReadContentFilter().Loader : "" };
         if (filter.Kind == ContentKind.Mod && target.ModLoader is not ("forge" or "fabric" or "neoforge" or "quilt")) { SetCatalogStatus("该实例需要先安装 Forge、Fabric、NeoForge 或 Quilt 加载器。"); return; }
         var snapshot = DownloadAvailability.Snapshot(settings());
@@ -93,7 +93,7 @@ public partial class DownloadCenter
     }
     internal DownloadTask EnqueueContent(ContentPlan plan, AppSettings snapshot)
     {
-        if (!canInstall()) throw new InvalidOperationException("请等待当前启动任务或游戏结束后再添加下载任务。");
+        if (!canInstall()) throw new InvalidOperationException("请等待当前任务结束后再添加下载任务。");
         var task = Queue.EnqueueWork(DownloadAvailability.Snapshot(snapshot), new(plan.Name,
             plan.Target.Display + $" · {plan.InstallFiles.Count} 个资源文件", plan.TargetFiles,
             (options, progress, token) => contentService.InstallAsync(options, plan, progress, token), plan.IconUrl));

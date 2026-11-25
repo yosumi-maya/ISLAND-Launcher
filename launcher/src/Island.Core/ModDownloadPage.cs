@@ -12,7 +12,7 @@ public static class ModDownloadPage
     private static readonly HttpClient Client = new()
     {
         Timeout = TimeSpan.FromSeconds(12),
-        DefaultRequestHeaders = { { "User-Agent", "yosumi-maya/ISLAND-Launcher/1.1.0" } }
+        DefaultRequestHeaders = { { "User-Agent", "yosumi-maya/ISLAND-Launcher/1.2.0" } }
     };
 
     public static Task<string?> FindAsync(string instance, ModFile mod, CancellationToken token)

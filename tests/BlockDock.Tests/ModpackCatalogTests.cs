@@ -117,7 +117,8 @@ static class ModpackCatalogTests
                 }
                 Check(request.Headers.GetValues("x-api-key").Single() == "test", "API credential");
                 if (request.RequestUri.AbsolutePath.EndsWith("/download-url")) return Json("""{"data":"https://edge.forgecdn.net/files/test.zip"}""");
-                return Json(new JsonObject { ["data"] = new JsonObject { ["fileName"] = "pack.zip", ["downloadUrl"] = null, ["fileLength"] = bytes.Length, ["hashes"] = new JsonArray(new JsonObject { ["algo"] = 1, ["value"] = sha }) } }.ToJsonString());
+                Check(request.RequestUri.AbsolutePath == "/v1/mods/123/files/456", "Uses file metadata without an extra project request");
+                return Json(new JsonObject { ["data"] = new JsonObject { ["id"] = 456, ["modId"] = 123, ["fileName"] = "pack.zip", ["downloadUrl"] = null, ["fileLength"] = bytes.Length, ["hashes"] = new JsonArray(new JsonObject { ["algo"] = 1, ["value"] = sha }) } }.ToJsonString());
             }));
             var version = new CatalogVersion("456", "版本", [], [], DateTimeOffset.MinValue, "正式版", new());
             var path = await new ModpackCatalog(settings, network).DownloadArchiveAsync(Project(PackPlatform.CurseForge), version, Path.Combine(root, "cf-catalog"), default);

@@ -186,7 +186,7 @@ public partial class DownloadCenter : UserControl
     }
     internal DownloadTask Enqueue(InstallRequest request, AppSettings snapshot, PackInfo? pack = null, PackReleaseDownload? onlinePack = null)
     {
-        if (!canInstall()) throw new InvalidOperationException("请等待当前启动任务或游戏结束后再添加下载任务。");
+        if (!canInstall()) throw new InvalidOperationException("请等待当前任务结束后再添加下载任务。");
         DownloadAvailability.RequireSupported(pack, snapshot);
         if (onlinePack?.Project.Platform == PackPlatform.CurseForge && string.IsNullOrWhiteSpace(snapshot.CurseForgeApiKey))
             throw new InvalidOperationException(DownloadAvailability.CurseForgeNotice);
@@ -331,7 +331,7 @@ public partial class DownloadCenter : UserControl
             cancellation.Token.ThrowIfCancellationRequested();
             var pack = await service.InspectAsync(path, cancellation.Token).WaitAsync(cancellation.Token);
             cancellation.Token.ThrowIfCancellationRequested();
-            if (!canInstall()) throw new InvalidOperationException("请等待当前启动任务或游戏结束后再导入整合包。");
+            if (!canInstall()) throw new InvalidOperationException("请等待当前任务结束后再导入整合包。");
             ArchiveImportStatusPanel.Visibility = Visibility.Collapsed;
             DownloadAvailability.RequireSupported(pack);
             var confirmation = new PackConfirmationWindow(OwnerWindow, pack, snapshot);
@@ -355,7 +355,7 @@ public partial class DownloadCenter : UserControl
         if (sender is not Button { DataContext: DownloadTask task }) return;
         if (task.ShowPause) Queue.Pause(task);
         else if (canInstall()) Queue.Resume(task);
-        else MessageWindow.Inform(OwnerWindow, "请等待当前启动任务或游戏结束后再继续下载。");
+        else MessageWindow.Inform(OwnerWindow, "请等待当前任务结束后再继续下载。");
     }
     private void CancelTask(object sender, RoutedEventArgs e) { if (sender is Button { DataContext: DownloadTask task }) Queue.Cancel(task); }
     private void ClearTasks(object sender, RoutedEventArgs e) => Queue.ClearEnded();

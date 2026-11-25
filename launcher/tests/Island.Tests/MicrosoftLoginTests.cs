@@ -42,6 +42,8 @@ internal static class MicrosoftLoginTests
                 case "/user/authenticate":
                     data = """{"Token":"xbox","DisplayClaims":{"xui":[{"uhs":"123"}]}}"""; break;
                 case "/xsts/authorize":
+                    if (mode == "xsts-tls")
+                        throw new HttpRequestException(HttpRequestError.SecureConnectionError, "transport-diagnostic-fixture");
                     data = mode == "wrong-user" ? """{"Token":"xsts","DisplayClaims":{"xui":[{"uhs":"456"}]}}""" : """{"Token":"xsts","DisplayClaims":{"xui":[{"uhs":"123"}]}}"""; break;
                 case "/authentication/login_with_xbox":
                     var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(cancellationToken))!.AsObject();
@@ -79,7 +81,13 @@ internal static class MicrosoftLoginTests
             && !login.AuthorizationUri.AbsoluteUri.Contains(login.CodeVerifier) && !parameters.ContainsKey("client_secret")
             && State(login) != State(other) && login.CodeVerifier != other.CodeVerifier && login.RedirectUri.Port != other.RedirectUri.Port,
             "Each attempt gets independent cryptographic state, verifier and reserved loopback port; no secret or verifier is sent to the browser");
-        var completion = auth.CompleteBrowserAsync(login, default);
+        var authorizationSignals = 0;
+        var signaledBeforeExchange = false;
+        var completion = auth.CompleteBrowserAsync(login, default, () =>
+        {
+            authorizationSignals++;
+            signaledBeforeExchange = service.Paths.Count == 0;
+        });
         using (var wrong = await Callback(login, "?code=untrusted&state=wrong")) check(wrong.StatusCode == HttpStatusCode.BadRequest && !completion.IsCompleted && service.Paths.Count == 0, "Unmatched state cannot redeem a code or cancel the legitimate attempt");
         using (var missing = await Callback(login, "?code=untrusted")) check(missing.StatusCode == HttpStatusCode.BadRequest && !completion.IsCompleted, "Missing state is rejected");
         using (var duplicate = await Callback(login, "?code=a&code=b&state=" + State(login))) check(duplicate.StatusCode == HttpStatusCode.BadRequest && !completion.IsCompleted, "Duplicate callback fields cannot override the authorization code");
@@ -93,6 +101,7 @@ internal static class MicrosoftLoginTests
                 && !page.Contains(State(login)) && !page.Contains(login.CodeVerifier) && !page.Contains("<script"), "Callback page never echoes codes, state or tokens and forbids caching");
         }
         var result = await completion;
+        check(authorizationSignals == 1 && signaledBeforeExchange, "The accepted browser callback signals verification once, before token exchange");
         check(service.Grant is { } grant && grant["grant_type"] == "authorization_code" && grant["client_id"] == ClientId && grant["code"] == "received-code"
             && grant["code_verifier"] == login.CodeVerifier && grant["redirect_uri"] == login.RedirectUri.AbsoluteUri && !grant.ContainsKey("client_secret"), "Token redemption uses the same redirect URI and PKCE verifier without a client secret");
         check(service.XboxRequestValid && service.AuthorizedEntitlements && service.AuthorizedProfile && service.Paths.TakeLast(2).SequenceEqual(new[] { "/entitlements/mcstore", "/minecraft/profile" }), "Browser login verifies Xbox, XSTS, Minecraft token, store entitlements and Java profile in order");
@@ -108,8 +117,22 @@ internal static class MicrosoftLoginTests
             using var response = await Callback(failedLogin, "?code=code&state=" + State(failedLogin));
             var error = await Failure(pending);
             check(error is InvalidOperationException or InvalidDataException && !error.Message.Contains("secret-response-contents"), "Invalid authentication stops without exposing response credentials: " + mode);
+            if (mode == "oauth-denied") check(error.Message.Contains("HTTP 400") && !error.Message.Contains("防火墙"), "An OAuth HTTP response retains its authorization error");
             if (mode is "entitlements-denied" or "bad-entitlements") check(!failedService.Paths.Contains("/minecraft/profile"), "Failed entitlement validation cannot fall through to a profile: " + mode);
             if (mode == "wrong-user") check(!failedService.Paths.Contains("/authentication/login_with_xbox"), "Mismatched Xbox user identities never obtain a Minecraft token");
+        }
+        using (var tlsService = new Service("xsts-tls"))
+        using (var tlsAuth = new MicrosoftAuth(tlsService))
+        using (var tlsLogin = tlsAuth.BeginBrowserLogin(ClientId))
+        {
+            var pending = tlsAuth.CompleteBrowserAsync(tlsLogin, default);
+            using var callback = await Callback(tlsLogin, "?code=private-test-code&state=" + State(tlsLogin));
+            var error = await Failure(pending);
+            check(callback.IsSuccessStatusCode && error is InvalidOperationException { InnerException: HttpRequestException } &&
+                error.Message.Contains("无法与登录服务建立安全连接（xsts.auth.xboxlive.com）") &&
+                error.Message.Contains("防火墙、代理或 VPN") && !error.Message.Contains("private-test-code") &&
+                !error.Message.Contains("transport-diagnostic-fixture") && !tlsService.Paths.Contains("/authentication/login_with_xbox"),
+                "A browser TLS failure after authorization shows the failing service and network guidance without credentials");
         }
         using (var declined = auth.BeginBrowserLogin(ClientId))
         {

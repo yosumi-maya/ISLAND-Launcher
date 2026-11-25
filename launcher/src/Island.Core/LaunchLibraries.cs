@@ -12,16 +12,26 @@ public static class LaunchLibraries
         foreach (var library in profile.Array("libraries").OfType<JsonObject>().Where(VersionProfile.Allowed))
         {
             var downloads = library["downloads"] as JsonObject;
-            if (downloads?["artifact"] is JsonObject artifact && artifact.Str("url").Length > 0)
+            if (downloads?["artifact"] is JsonObject artifact)
                 yield return MinecraftInstaller.FromArtifact(PathFor(root, library), artifact);
             else if (downloads is null)
             {
                 var path = PathFor(root, library);
-                if (library.Str("hint") == "local" || library.Str("name").StartsWith("org.jackhuang.hmcl:", StringComparison.Ordinal))
+                var name = library.Str("name");
+                if (library.Str("hint") == "local" || name.StartsWith("org.jackhuang.hmcl:", StringComparison.Ordinal))
                 {
-                    if (!File.Exists(path)) throw new FileNotFoundException("缺少整合包附带的本地兼容库，请重新导入完整游戏目录：" + library.Str("name"), path);
+                    if (!File.Exists(path)) throw new FileNotFoundException("缺少整合包附带的本地兼容库，请重新导入完整游戏目录：" + name, path);
                 }
-                else yield return new(path, [library.Str("url", "https://libraries.minecraft.net/").TrimEnd('/') + "/" + SafePaths.Maven(library.Str("name"))]);
+                else
+                {
+                    var repository = library.Str("url", "https://libraries.minecraft.net/").TrimEnd('/');
+                    var url = repository + "/" + SafePaths.Maven(name);
+                    // Old Forge profiles store the installer-embedded universal JAR under an unclassified local name.
+                    if (repository == "https://maven.minecraftforge.net" && profile.Str("mainClass") == "net.minecraft.launchwrapper.Launch" &&
+                        name.Split(':') is ["net.minecraftforge", "forge", _])
+                        yield return new(path, [url, repository + "/" + SafePaths.Maven(name + ":universal")]);
+                    else yield return new(path, [url]);
+                }
             }
             var classifier = library["natives"].Str("windows").Replace("${arch}", "64");
             if (classifier.Length > 0 && downloads?["classifiers"]?[classifier] is JsonObject native)
@@ -31,6 +41,8 @@ public static class LaunchLibraries
                 yield return MinecraftInstaller.FromArtifact(SafePaths.Under(root, "libraries/" + relative), native);
             }
         }
+        foreach (var generated in profile.Array("islandGeneratedLibraries").OfType<JsonObject>())
+            yield return MinecraftInstaller.FromArtifact(SafePaths.Under(root, "libraries/" + generated.Str("path")), generated) with { Urls = [] };
     }
 
     public static string PathFor(string root, JsonObject library)

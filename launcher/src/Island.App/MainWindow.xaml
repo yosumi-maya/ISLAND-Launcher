@@ -155,7 +155,7 @@
   </Grid></local:MaterialBorder>
  </Grid>
  <Grid x:Name="WindowFooter" Grid.RowSpan="2" Height="32" VerticalAlignment="Bottom" Margin="32,0,32,0" IsHitTestVisible="False">
-  <TextBlock x:Name="WindowVersionLabel" Text="ISLAND LAUNCHER   /   1.1.0" FontSize="8" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"/>
+  <TextBlock x:Name="WindowVersionLabel" Text="ISLAND LAUNCHER   /   1.2.0" FontSize="8" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"/>
  </Grid>
  <Border x:Name="ArchiveDropHint" Grid.RowSpan="2" Panel.ZIndex="100" Margin="18" Padding="30" CornerRadius="14" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Focus}" BorderThickness="1" Visibility="Collapsed" IsHitTestVisible="False">
   <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="松开以导入整合包" FontSize="25" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="支持 .zip / .mrpack，随后确认名称与安装目录" Foreground="{DynamicResource Muted}" Margin="0,12,0,0" HorizontalAlignment="Center"/></StackPanel>

@@ -19,7 +19,7 @@ public sealed partial class MicrosoftAuth : IDisposable
     {
         http = new HttpClient(handler ?? CreateHandler(verifyCertificates));
         http.Timeout = TimeSpan.FromSeconds(45);
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("IslandLauncher/1.1.0");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("IslandLauncher/1.2.0");
     }
     internal static HttpClientHandler CreateHandler(bool verifyCertificates)
     {
@@ -37,7 +37,7 @@ public sealed partial class MicrosoftAuth : IDisposable
     {
         if (!Guid.TryParse(clientId, out _)) throw new ArgumentException("请先在设置中填写此启动器自己的 Microsoft 应用 Client ID。");
         using var content = new FormUrlEncodedContent(new Dictionary<string, string> { ["client_id"] = clientId, ["scope"] = Scope });
-        using var response = await http.PostAsync(Authority + "devicecode", content, token);
+        using var response = await PostLoginAsync(Authority + "devicecode", content, token);
         var data = await ReadAsync(response, "请求 Microsoft 设备码", token);
         var url = data.Str("verification_uri");
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != "https" || !(uri.Host == "microsoft.com" || uri.Host.EndsWith(".microsoft.com", StringComparison.OrdinalIgnoreCase) || uri.Host == "login.live.com"))
@@ -51,7 +51,7 @@ public sealed partial class MicrosoftAuth : IDisposable
         {
             await Task.Delay(TimeSpan.FromSeconds(interval), token);
             using var content = new FormUrlEncodedContent(new Dictionary<string, string> { ["client_id"] = clientId, ["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code", ["device_code"] = device.DeviceCode });
-            using var response = await http.PostAsync(Authority + "token", content, token);
+            using var response = await PostLoginAsync(Authority + "token", content, token);
             var data = JsonNode.Parse(await response.Content.ReadAsStringAsync(token)) as JsonObject ?? throw new InvalidDataException("Microsoft 登录响应无效。");
             var error = data.Str("error");
             if (error == "authorization_pending") continue;
@@ -65,7 +65,7 @@ public sealed partial class MicrosoftAuth : IDisposable
     {
         using var content = new FormUrlEncodedContent(new Dictionary<string, string>
         { ["client_id"] = account.ClientId, ["grant_type"] = "refresh_token", ["refresh_token"] = SecretProtection.Unprotect(account.ProtectedRefreshToken), ["scope"] = Scope });
-        using var response = await http.PostAsync(Authority + "token", content, token);
+        using var response = await PostLoginAsync(Authority + "token", content, token);
         var data = await ReadAsync(response, "刷新 Microsoft 登录（失败时请重新添加账号）", token);
         if (data.Str("refresh_token").Length == 0) data["refresh_token"] = SecretProtection.Unprotect(account.ProtectedRefreshToken);
         var result = await ExchangeAsync(account.ClientId, data, token);
@@ -98,14 +98,14 @@ public sealed partial class MicrosoftAuth : IDisposable
         if (access.Length == 0) throw new InvalidDataException("Minecraft 未返回访问凭据。");
         using var ownershipRequest = new HttpRequestMessage(HttpMethod.Get, "https://api.minecraftservices.com/entitlements/mcstore");
         ownershipRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", access);
-        using var ownershipResponse = await http.SendAsync(ownershipRequest, token);
+        using var ownershipResponse = await SendLoginAsync(ownershipRequest, token);
         var ownership = await ReadAsync(ownershipResponse, "验证 Minecraft 游戏资格", token);
         if (ownership["items"] is not JsonArray) throw new InvalidDataException("Minecraft 游戏资格响应无效。");
         // An empty store list is possible for subscriptions. Like HMCL, require a successful
         // entitlement request AND a valid Java profile rather than rejecting Game Pass here.
         using var request = new HttpRequestMessage(HttpMethod.Get, "https://api.minecraftservices.com/minecraft/profile");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", access);
-        using var profileResponse = await http.SendAsync(request, token);
+        using var profileResponse = await SendLoginAsync(request, token);
         if (profileResponse.StatusCode == System.Net.HttpStatusCode.NotFound) throw new InvalidOperationException("账号没有可用的 Minecraft Java 玩家档案。请确认拥有游戏并已在官方启动器完成玩家名设置。");
         var profile = await ReadAsync(profileResponse, "读取 Minecraft 玩家档案", token);
         if (profile.Str("name").Length == 0 || !Guid.TryParse(profile.Str("id"), out _)) throw new InvalidDataException("Minecraft 玩家档案无效。");
@@ -152,8 +152,31 @@ public sealed partial class MicrosoftAuth : IDisposable
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = JsonContent.Create(data) };
         if (new Uri(url).Host.EndsWith("xboxlive.com", StringComparison.Ordinal)) request.Headers.Add("x-xbl-contract-version", "1");
-        using var response = await http.SendAsync(request, token);
+        using var response = await SendLoginAsync(request, token);
         return await ReadAsync(response, stage, token);
+    }
+    private async Task<HttpResponseMessage> PostLoginAsync(string url, HttpContent content, CancellationToken token)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
+        return await SendLoginAsync(request, token).ConfigureAwait(false);
+    }
+    private async Task<HttpResponseMessage> SendLoginAsync(HttpRequestMessage request, CancellationToken token)
+    {
+        try { return await http.SendAsync(request, token).ConfigureAwait(false); }
+        catch (Exception ex) when (!token.IsCancellationRequested &&
+            ex is (HttpRequestException { StatusCode: null } or OperationCanceledException { InnerException: TimeoutException }))
+        {
+            var host = request.RequestUri!.IdnHost;
+            var reason = ex switch
+            {
+                HttpRequestException { HttpRequestError: HttpRequestError.SecureConnectionError } => "无法与登录服务建立安全连接",
+                HttpRequestException { HttpRequestError: HttpRequestError.NameResolutionError } => "无法解析登录服务域名",
+                OperationCanceledException => "连接登录服务超时",
+                _ => "无法连接登录服务"
+            };
+            throw new InvalidOperationException(
+                $"正版登录失败：{reason}（{host}）。请检查网络连接，确认防火墙、代理或 VPN 是否影响启动器联网，然后重试。", ex);
+        }
     }
     private static async Task<JsonObject> ReadAsync(HttpResponseMessage response, string stage, CancellationToken token)
     {

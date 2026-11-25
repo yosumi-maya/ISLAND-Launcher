@@ -29,7 +29,7 @@ internal static class ContentDownloadUiTests
         while (!predicate() && DateTime.UtcNow < until) await Task.Delay(20);
         if (!predicate()) throw new Exception("Resource UI did not reach the expected state.");
     }
-    private sealed class Service : IContentDownloads
+    internal sealed class Service : IContentDownloads
     {
         public static readonly byte[] ExistingDependency = Encoding.UTF8.GetBytes("owned already installed prerequisite fixture");
         public ContentFilter? LastFilter;

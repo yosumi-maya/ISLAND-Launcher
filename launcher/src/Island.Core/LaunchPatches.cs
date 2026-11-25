@@ -48,5 +48,5 @@ public static class LaunchPatches
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
         return target;
     }
-    [DllImport("kernel32.dll")] private static extern uint GetACP();
+    [DllImport("kernel32.dll")] internal static extern uint GetACP();
 }

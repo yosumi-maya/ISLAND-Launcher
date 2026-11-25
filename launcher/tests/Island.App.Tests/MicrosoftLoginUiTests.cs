@@ -23,7 +23,7 @@ internal static class MicrosoftLoginUiTests
         if (!predicate()) throw new Exception("Microsoft login UI did not reach the expected state.");
     }
     private static void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-    private static BrowserLoginWindow Window(Window owner, Func<Action<string>, CancellationToken, Task<AuthResult>> authenticate, Action<string> open, CancellationToken token = default, bool startOnLoaded = true)
+    private static BrowserLoginWindow Window(Window owner, Func<Action<string>, Action, CancellationToken, Task<AuthResult>> authenticate, Action<string> open, CancellationToken token = default, bool startOnLoaded = true)
     {
         var window = new BrowserLoginWindow(owner, authenticate, token, open) { Left = -16000, Top = 0, WindowStartupLocation = WindowStartupLocation.Manual, ShowInTaskbar = false };
         if (startOnLoaded) window.Loaded += (_, _) => Click(Children<Button>(window).Single(button => button.Name == "ReopenMicrosoftBrowser"));
@@ -33,8 +33,10 @@ internal static class MicrosoftLoginUiTests
     public static async Task RunAsync(Window owner, Action<bool, string> check, Action<Window, string> capture)
     {
         var opens = 0; var canceled = false; var stopped = false; var starts = 0; string? lastUrl = null;
-        async Task<AuthResult> Pending(Action<string> open, CancellationToken token)
+        Action? reportAuthorized = null;
+        async Task<AuthResult> Pending(Action<string> open, Action authorized, CancellationToken token)
         {
+            reportAuthorized = authorized;
             starts++; open("https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize");
             try { await Task.Delay(Timeout.Infinite, token); throw new Exception("Unexpected pending completion."); }
             catch (OperationCanceledException) { canceled = true; throw; }
@@ -46,6 +48,8 @@ internal static class MicrosoftLoginUiTests
             pending.Show(); await Task.Delay(100); pending.UpdateLayout();
             check(opens == 0 && starts == 0 && Children<Button>(pending).Single(b => b.Name == "ReopenMicrosoftBrowser").Content as string == "打开浏览器登录  ↗",
                 "Opening Microsoft login presents the method choice without starting authorization or opening the browser");
+            var progress = Children<ProgressBar>(pending).Single(bar => bar.Name == "BrowserLoginProgress");
+            check(!progress.IsVisible && !progress.IsIndeterminate, "The login method choice is idle");
             capture(pending, "Microsoft-Login-Choice");
             var purchase = Children<Button>(pending).Single(b => b.Name == "PurchaseMinecraftButton");
             Click(purchase);
@@ -61,26 +65,35 @@ internal static class MicrosoftLoginUiTests
                 && buttons.Any(b => b.Name == "UseMicrosoftDeviceCode") && pending.Result is null, "Microsoft login opens the system browser and keeps a visible device-code alternative while waiting");
             Click(buttons.Single(b => b.Name == "ReopenMicrosoftBrowser"));
             check(opens == 2, "Reopening the browser reuses the active authorization attempt");
+            check(progress.IsIndeterminate == SystemParameters.ClientAreaAnimation && progress.IsVisible == SystemParameters.ClientAreaAnimation,
+                "Pending browser login animates only when Windows animations are enabled");
             capture(pending, "Microsoft-Browser-Login");
             check(buttons.Where(b => b.Name is "UseMicrosoftDeviceCode" or "ReopenMicrosoftBrowser").All(b => b.ActualWidth >= 80 && b.TranslatePoint(new Point(b.ActualWidth, 0), pending).X < pending.ActualWidth), "Login buttons remain within the native dialog at normal text sizing");
+            await Task.Run(reportAuthorized!);
+            await Wait(() => Children<TextBlock>(pending).Any(text => text.Text.Contains("正在验证 Xbox 身份")));
+            check(progress.IsIndeterminate == SystemParameters.ClientAreaAnimation && !buttons.Single(b => b.Name == "ReopenMicrosoftBrowser").IsEnabled,
+                "Receiving the callback keeps the loading feedback and advances to verification");
+            capture(pending, "Microsoft-Browser-Verification");
             Click(buttons.Single(b => b.Name == "UseMicrosoftDeviceCode")); await Wait(() => stopped);
-            check(canceled && pending.UseDeviceCode && pending.Result is null && !pending.IsVisible, "Choosing device-code login closes and cancels the browser attempt before the caller starts a new flow");
+            check(canceled && pending.UseDeviceCode && pending.Result is null && !pending.IsVisible && !progress.IsIndeterminate,
+                "Choosing device-code login cancels the browser attempt and clears the animation");
         }
         finally { pending.Close(); }
 
         var idleDeviceStarts = 0; var idleDeviceOpens = 0;
-        var idleDevice = Window(owner, (_, _) => { idleDeviceStarts++; return Task.FromException<AuthResult>(new Exception("Must not start")); }, _ => idleDeviceOpens++, startOnLoaded: false);
+        var idleDevice = Window(owner, (_, _, _) => { idleDeviceStarts++; return Task.FromException<AuthResult>(new Exception("Must not start")); }, _ => idleDeviceOpens++, startOnLoaded: false);
         idleDevice.Show(); await Task.Delay(40);
         Click(Children<Button>(idleDevice).Single(button => button.Name == "UseMicrosoftDeviceCode"));
         check(idleDevice.UseDeviceCode && idleDeviceStarts == 0 && idleDeviceOpens == 0 && !idleDevice.IsVisible,
             "Choosing device-code from the initial dialog never starts a browser authorization attempt");
 
         var attempts = 0;
-        var failure = Window(owner, (_, _) => { attempts++; return Task.FromException<AuthResult>(new InvalidOperationException("模拟：尚未配置本机回调")); }, _ => { });
+        var failure = Window(owner, (_, _, _) => { attempts++; return Task.FromException<AuthResult>(new InvalidOperationException("模拟：尚未配置本机回调")); }, _ => { });
         try
         {
             failure.Show(); await Wait(() => Children<TextBlock>(failure).Any(t => t.Text.Contains("模拟："))); failure.UpdateLayout();
             check(Children<TextBlock>(failure).Any(t => t.Text.Contains("改用设备码登录")) && failure.Result is null, "Browser failures retain the dialog and explain retry or fallback instead of saving an account");
+            check(!Children<ProgressBar>(failure).Single(bar => bar.Name == "BrowserLoginProgress").IsIndeterminate, "A failed login stops animating");
             Click(Children<Button>(failure).Single(b => b.Name == "ReopenMicrosoftBrowser"));
             await Wait(() => attempts == 2);
             check(attempts == 2, "Retry starts a fresh authorization attempt after a failure");
@@ -90,7 +103,7 @@ internal static class MicrosoftLoginUiTests
 
         using (var failedCancellation = new CancellationTokenSource())
         {
-            var failed = Window(owner, (_, _) => Task.FromException<AuthResult>(new IOException("模拟登录失败")), _ => { }, failedCancellation.Token);
+            var failed = Window(owner, (_, _, _) => Task.FromException<AuthResult>(new IOException("模拟登录失败")), _ => { }, failedCancellation.Token);
             try
             {
                 failed.Show(); await Wait(() => Children<TextBlock>(failed).Any(text => text.Text.Contains("模拟登录失败")));
@@ -102,7 +115,7 @@ internal static class MicrosoftLoginUiTests
         using (var lateCancellation = new CancellationTokenSource())
         {
             var lateResponse = new TaskCompletionSource<AuthResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var late = Window(owner, (_, _) => lateResponse.Task, _ => { }, lateCancellation.Token);
+            var late = Window(owner, (_, _, _) => lateResponse.Task, _ => { }, lateCancellation.Token);
             try
             {
                 late.Show(); lateCancellation.Cancel(); await Wait(() => !late.IsVisible);
@@ -120,7 +133,7 @@ internal static class MicrosoftLoginUiTests
             host.Show();
             var failedTask = host.RunOperationAsync(async token =>
             {
-                var dialog = Window(host, (_, _) => Task.FromException<AuthResult>(new IOException("失败后取消")), _ => { }, token);
+                var dialog = Window(host, (_, _, _) => Task.FromException<AuthResult>(new IOException("失败后取消")), _ => { }, token);
                 _ = host.Dispatcher.BeginInvoke(new Action(async () =>
                 {
                     await Wait(() => Children<TextBlock>(dialog).Any(text => text.Text.Contains("失败后取消")));
@@ -208,7 +221,7 @@ internal static class MicrosoftLoginUiTests
 
         }
         var expected = new AuthResult(accepted, new(accepted.Name, accepted.Uuid, "test-session", true));
-        var success = Window(owner, (_, _) => Task.FromResult(expected), _ => { });
+        var success = Window(owner, (_, _, _) => Task.FromResult(expected), _ => { });
         check(success.ShowDialog() == true && success.Result == expected && !success.UseDeviceCode, "A verified result completes the native modal dialog and returns the authenticated account");
     }
 }

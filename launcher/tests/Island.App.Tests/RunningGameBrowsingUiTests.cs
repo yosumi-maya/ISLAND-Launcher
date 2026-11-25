@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using BlockDock.App;
 using Island.App;
 using Island.Core;
 
@@ -19,6 +20,7 @@ internal static class RunningGameBrowsingUiTests
             var version = Path.Combine(directory, "versions", "Alpha"); Directory.CreateDirectory(version); File.Copy(fixtureJar, Path.Combine(version, "Alpha.jar"));
             var profile = new JsonObject { ["id"] = "Alpha", ["mainClass"] = "IslandUiFixture", ["arguments"] = new JsonObject { ["game"] = new JsonArray(), ["jvm"] = new JsonArray("-Disland.ui.hold=" + hold) } };
             File.WriteAllText(Path.Combine(version, "Alpha.json"), profile.ToJsonString());
+            File.WriteAllText(Path.Combine(version, "blockdock-instance.json"), """{"minecraft":"1.20.1","loader":"Vanilla"}""");
         }
         var state = new LauncherState { GameDirectory = first, JavaPath = java, AutoMemory = false, MemoryMb = 512 }; state.EnsureGameFolders();
         state.ActiveGameFolder.Name = "运行目录"; state.ActiveGameFolder.Isolation = VersionIsolation.Enabled;
@@ -27,7 +29,9 @@ internal static class RunningGameBrowsingUiTests
         state.For(first, "Alpha").DisplayName = "正在运行的实例"; state.For(second, "Alpha").DisplayName = "正在浏览的实例";
         var player = PlayerAccount.Offline("BrowseTester"); state.Accounts.Add(player); state.SelectedAccountId = player.Id;
         var store = new LauncherStore(Path.Combine(root, "running-browse-state")); store.Save(state);
-        var window = new MainWindow(store) { Owner = owner, Left = -16000, Top = 0, WindowStartupLocation = WindowStartupLocation.Manual, ShowInTaskbar = false };
+        var content = new ContentDownloadUiTests.Service();
+        var window = new MainWindow(store, downloadService: new DownloadCenterUiTests.Service(), contentService: content)
+        { Owner = owner, Left = -16000, Top = 0, WindowStartupLocation = WindowStartupLocation.Manual, ShowInTaskbar = false };
         T Find<T>(string name) where T : FrameworkElement => (T)window.FindName(name);
         void Folder(string path) => Find<ItemsControl>("FolderTabs").Items.Cast<RadioButton>().Single(tab => GameFolder.SamePath((string)tab.ToolTip, path)).IsChecked = true;
         static void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
@@ -40,6 +44,8 @@ internal static class RunningGameBrowsingUiTests
         try
         {
             window.Show(); window.UpdateLayout(); Click(Find<Button>("LaunchButton"));
+            var center = Find<DownloadCenter>("DownloadCenterView");
+            check(!center.CanImportArchive, "Download center waits while the launcher prepares the game");
             var log = Find<TextBox>("LogBox"); await Wait(() => log.Text.Contains("ISLAND_UI_PROCESS_OK"));
             check(Find<ItemsControl>("FolderTabs").IsEnabled && !Find<Button>("LaunchButton").IsEnabled, "A real running JVM leaves folder browsing enabled while preventing a second launch");
             Folder(second);
@@ -54,6 +60,45 @@ internal static class RunningGameBrowsingUiTests
             check(!Find<Button>("ManageFoldersButton").IsEnabled && Find<TextBlock>("OperationLabel").Text.Contains("正在运行的实例"), "Folder editing remains guarded and the task panel still names the original running instance");
             Click(Find<Button>("LaunchButton"));
             check(Directory.GetFiles(Path.Combine(store.DirectoryPath, "logs"), "*.log").Length == 1 && !log.Text.Contains("游戏已退出"), "Attempting to launch the browsed instance does not create a second game process");
+
+            Find<RadioButton>("NavDownloads").IsChecked = true;
+            ((RadioButton)center.FindName("ShadersTab")).IsChecked = true;
+            var targets = (ComboBox)center.FindName("ContentTargetBox");
+            targets.SelectedItem = targets.Items.Cast<ContentTarget>().Single(target => GameFolder.SamePath(target.GameDirectory, first));
+            await center.SearchAsync(0);
+            ((ListBox)center.FindName("PackResults")).SelectedIndex = 0;
+            var download = window.Dispatcher.InvokeAsync<Task>(async () =>
+            {
+                var release = Application.Current.Windows.OfType<ContentReleaseWindow>().Single();
+                try
+                {
+                    var install = Descendants<Button>(release).Single(button => button.Content as string == "查看安装清单  →");
+                    await Wait(() => install.IsEnabled);
+                    var confirm = window.Dispatcher.InvokeAsync<Task>(async () =>
+                    {
+                        var dialog = Application.Current.Windows.OfType<ContentConfirmationWindow>().Single();
+                        try
+                        {
+                            var enqueue = Descendants<Button>(dialog).Single(button => button.Content as string == "确认并加入队列");
+                            await Wait(() => enqueue.IsEnabled);
+                            Click(enqueue);
+                        }
+                        finally { if (dialog.IsVisible) dialog.Close(); }
+                    });
+                    Click(install);
+                    if (confirm.Abort()) throw new Exception("Shader installation did not open its confirmation.");
+                    await confirm.Task.Unwrap();
+                }
+                finally { if (release.IsVisible) release.Close(); }
+            });
+            Click((Button)center.FindName("ChoosePackButton"));
+            check(!download.Abort(), "Shader details open with the game running");
+            await download.Task.Unwrap();
+            var task = center.Queue.Items.Single();
+            await Wait(() => task.IsEnded);
+            check(task.State == DownloadTaskState.Completed && content.Runs.Single().TargetFiles.All(File.Exists)
+                && !log.Text.Contains("游戏已退出"), "The confirmed shader download installs into the running instance before the game exits");
+            Find<RadioButton>("NavLibrary").IsChecked = true;
             _ = window.Dispatcher.BeginInvoke(new Action(() =>
             {
                 var dialog = Application.Current.Windows.OfType<MessageWindow>().Single(); dialog.UpdateLayout();

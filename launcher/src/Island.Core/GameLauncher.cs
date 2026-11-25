@@ -25,13 +25,18 @@ public static class GameLauncher
         return false;
     }
 
-    public static async Task RepairAsync(string root, ResolvedVersion version, DownloadClient network, IProgress<InstallProgress>? progress, CancellationToken token, VersionIsolation isolation = VersionIsolation.Auto)
+    public static async Task RepairAsync(string root, ResolvedVersion version, DownloadClient network, IProgress<InstallProgress>? progress,
+        CancellationToken token, VersionIsolation isolation = VersionIsolation.Auto, string? javaPath = null)
     {
         await using var verifier = new LaunchFileVerifier(root, network);
-        await verifier.EnsureManyAsync(LaunchLibraries.Files(root, version.Profile), "检查游戏依赖", progress, token);
-        var client = version.Chain.LastOrDefault(json => json["downloads"]?["client"] is JsonObject)?["downloads"]?["client"] as JsonObject;
-        if (client is not null) await verifier.EnsureAsync(MinecraftInstaller.FromArtifact(version.ClientJar, client), token);
-        if (!File.Exists(version.ClientJar)) throw new FileNotFoundException("游戏本体缺失，请重新安装对应版本。", version.ClientJar);
+        var libraries = LaunchLibraries.Files(root, version.Profile).ToArray();
+        static bool IsLocal(TransferFile file) => file.Urls.All(string.IsNullOrWhiteSpace);
+        await verifier.EnsureManyAsync(libraries.Where(file => !IsLocal(file)), "检查游戏依赖", progress, token);
+        if (version.ClientDownload is { } client)
+            await verifier.EnsureAsync(MinecraftInstaller.FromArtifact(version.ClientJar, client), token);
+        if (!File.Exists(version.ClientJar))
+            throw new FileNotFoundException("缺少当前版本指定的游戏 JAR，请恢复该文件或重新导入实例：" + Path.GetFileName(version.ClientJar), version.ClientJar);
+        await ForgeLaunchRepair.VerifyLocalLibrariesAsync(root, version, libraries.Where(IsLocal), verifier, network, javaPath, progress, token);
         if (version.Profile["logging"]?["client"]?["file"] is JsonObject logFile)
             await verifier.EnsureAsync(MinecraftInstaller.FromArtifact(SafePaths.Under(root, "assets/log_configs/" + logFile.Str("id")), logFile), token);
         if (version.Profile["assetIndex"] is not JsonObject assetInfo) return;
@@ -75,10 +80,9 @@ public static class GameLauncher
             foreach (var library in version.Profile.Array("libraries").OfType<JsonObject>().Where(VersionProfile.Allowed))
             {
                 var downloads = library["downloads"] as JsonObject;
-                var artifact = downloads?["artifact"];
                 if (LaunchLibraries.HasArtifact(root, library))
                 {
-                    var path = SafePaths.Under(root, "libraries/" + (artifact?.Str("path", SafePaths.Maven(library.Str("name"))) ?? SafePaths.Maven(library.Str("name"))));
+                    var path = LaunchLibraries.PathFor(root, library);
                     if (!File.Exists(path)) throw new FileNotFoundException("缺少依赖文件，请联网启动以修复：" + Path.GetFileName(path), path);
                     libraries.Add(path);
                 }
@@ -100,7 +104,7 @@ public static class GameLauncher
                 ["auth_access_token"] = player.AccessToken, ["auth_session"] = "token:" + player.AccessToken + ":" + player.Uuid,
                 ["user_type"] = player.Microsoft ? "msa" : "legacy", ["version_type"] = version.Profile.Str("type", "release"),
                 ["user_properties"] = "{}", ["natives_directory"] = natives, ["launcher_name"] = "IslandLauncher",
-                ["launcher_version"] = "1.1.0", ["classpath"] = string.Join(Path.PathSeparator, libraries.Distinct(StringComparer.OrdinalIgnoreCase)),
+                ["launcher_version"] = "1.2.0", ["classpath"] = string.Join(Path.PathSeparator, libraries.Distinct(StringComparer.OrdinalIgnoreCase)),
                 ["library_directory"] = SafePaths.Under(root, "libraries"), ["classpath_separator"] = Path.PathSeparator.ToString(),
                 // HMCL adds this placeholder to Forge's ignoreList when normalizing imported profiles.
                 ["primary_jar_name"] = Path.GetFileName(version.ClientJar),
@@ -117,7 +121,17 @@ public static class GameLauncher
                 features["has_quick_plays_support"] = true; features["is_quick_play_singleplayer"] = true;
                 replacements["quickPlaySingleplayer"] = quickPlayWorld; replacements["quickPlayPath"] = quickPlayLog;
             }
-            string Expand(string text) => Regex.Replace(text, @"\$\{([^}]+)\}", match => replacements.TryGetValue(match.Groups[1].Value, out var value) ? value : throw new InvalidDataException("不支持的启动参数：" + match.Value));
+            string Expand(string text)
+            {
+                var expanded = Regex.Replace(text, @"\$\{([^}]+)\}", match => replacements.TryGetValue(match.Groups[1].Value, out var value) ? value : throw new InvalidDataException("不支持的启动参数：" + match.Value));
+                const string ignoreList = "-DignoreList=";
+                // Forge uses the selected version name here, which can differ from the inherited client JAR's filename.
+                if (text.StartsWith(ignoreList, StringComparison.Ordinal) &&
+                    text[ignoreList.Length..].Split(',').Contains("${version_name}.jar") &&
+                    !expanded[ignoreList.Length..].Split(',').Contains(replacements["primary_jar_name"]))
+                    expanded += "," + replacements["primary_jar_name"];
+                return expanded;
+            }
             IEnumerable<string> Arguments(JsonArray array)
             {
                 foreach (var item in array)
@@ -153,6 +167,7 @@ public static class GameLauncher
                 args.Add(logging.Str("argument").Replace("${path}", SafePaths.Under(root, "assets/log_configs/" + file.Str("id"))));
             args.AddRange([$"-Xms{options.InitialMemoryMb ?? 256}M", $"-Xmx{memoryMb}M"]);
             if (options.PermGenMb is { } perm && javaMajor < 8) args.Add($"-XX:MaxPermSize={perm}M");
+            var generatedJvmCount = args.Count;
             // Explicit user flags come last, so a chosen collector or heap size wins over generated defaults.
             args.AddRange(custom);
             if (LaunchPatches.UseWrapper(options, javaMajor)) args.AddRange(["-jar", LaunchPatches.Extract(root, true)]);
@@ -163,7 +178,7 @@ public static class GameLauncher
             args.AddRange(JvmArguments.Parse(options.ExtraGameArguments, "游戏"));
             var start = new ProcessStartInfo(java) { WorkingDirectory = instance, UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
                 StandardOutputEncoding = System.Text.Encoding.UTF8, StandardErrorEncoding = System.Text.Encoding.UTF8 };
-            foreach (var arg in args) start.ArgumentList.Add(arg);
+            JavaLaunchCommand.Apply(start, args, generatedJvmCount, javaMajor, natives, player.Microsoft ? player.AccessToken : null);
             foreach (var variable in new[] { "_JAVA_OPTIONS", "JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "CLASSPATH" }) start.Environment.Remove(variable);
             return new(start, natives, args);
         }

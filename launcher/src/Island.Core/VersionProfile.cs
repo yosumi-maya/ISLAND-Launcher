@@ -4,7 +4,10 @@ using BlockDock.Core;
 
 namespace Island.Core;
 
-public sealed record ResolvedVersion(string Id, JsonObject Profile, string ClientJar, IReadOnlyList<JsonObject> Chain);
+public sealed record ResolvedVersion(string Id, JsonObject Profile, string ClientJar, IReadOnlyList<JsonObject> Chain)
+{
+    internal JsonObject? ClientDownload { get; init; }
+}
 
 public static class VersionProfile
 {
@@ -28,7 +31,8 @@ public static class VersionProfile
         var merged = new JsonObject();
         var libraries = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
         var game = new JsonArray(); var jvm = new JsonArray();
-        string? client = null;
+        var clientDownloads = new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase);
+        string? clientId = null;
         var minimumJava = 8;
         foreach (var json in chain)
         {
@@ -43,24 +47,24 @@ public static class VersionProfile
             foreach (var argument in json["arguments"].Array("game")) game.Add(argument?.DeepClone());
             foreach (var argument in json["arguments"].Array("jvm")) jvm.Add(argument?.DeepClone());
             minimumJava = Math.Max(minimumJava, JavaRequirement.FromMetadata(json).MinimumMajor);
-            var jarId = json.Str("jar", enclosingIds[json]);
-            if (json["downloads"]?["client"] is JsonObject || json.Str("jar").Length > 0 || chain.Count == 1)
-                client = SafePaths.Under(root, $"versions/{SafePaths.InstanceName(jarId)}/{jarId}.jar");
-            else if (client is null)
-            {
-                var candidate = SafePaths.Under(root, $"versions/{SafePaths.InstanceName(jarId)}/{jarId}.jar");
-                if (File.Exists(candidate)) client = candidate;
-            }
+            var enclosingId = enclosingIds[json];
+            var download = json["downloads"]?["client"] as JsonObject;
+            if (download is not null) clientDownloads[enclosingId] = download;
+            if (json.Str("jar") is { Length: > 0 } jar)
+                clientId = SafePaths.InstanceName(jar);
+            else if (download is not null || chain.Count == 1 ||
+                (clientId is null && File.Exists(ClientPath(enclosingId))))
+                clientId = enclosingId;
         }
-        // Imported profiles can use an ID different from their enclosing directory.
-        var ownJar = SafePaths.Under(root, $"versions/{id}/{id}.jar");
-        if (File.Exists(ownJar) && chain[^1]["downloads"]?["client"] is JsonObject) client = ownJar;
+        // A download belongs to the declaring version's on-disk JAR, including imported profiles with renamed IDs.
+        string ClientPath(string name) => SafePaths.Under(root, $"versions/{name}/{name}.jar");
+        clientId ??= id;
         merged["libraries"] = new JsonArray(libraries.Values.Select(x => (JsonNode)x).ToArray());
         merged["arguments"] = new JsonObject { ["game"] = game, ["jvm"] = jvm };
         merged["javaVersion"] = new JsonObject { ["majorVersion"] = minimumJava };
         merged["javaVersion"]!["majorVersion"] = LaunchLibraries.MinimumJava(root, merged, GameDirectories.Resolve(root, id, isolation).Directory);
         if (string.IsNullOrWhiteSpace(merged.Str("mainClass"))) throw new InvalidDataException("版本缺少 mainClass，无法启动。");
-        return new(id, merged, client ?? ownJar, chain);
+        return new(id, merged, ClientPath(clientId), chain) { ClientDownload = clientDownloads.GetValueOrDefault(clientId) };
     }
 
     public static bool Allowed(JsonObject item) => Allowed(item, null);

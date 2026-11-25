@@ -81,7 +81,7 @@ public partial class MainWindow : Window
         ready = true; NavLibrary.IsChecked = true;
         Loaded += (_, _) =>
         {
-            try { ReloadLibrary(); ReloadAccounts(); Log("岛屿启动器 1.1.0 已就绪。"); if (store.LoadWarning is not null) Log(store.LoadWarning); }
+            try { ReloadLibrary(); ReloadAccounts(); Log("岛屿启动器 1.2.0 已就绪。"); if (store.LoadWarning is not null) Log(store.LoadWarning); }
             catch (Exception ex) { Report(ex); }
             _ = RefreshJavaAsync(false);
         };
@@ -263,7 +263,8 @@ public partial class MainWindow : Window
             if (account.Microsoft)
             {
                 OperationLabel.Text = "正在验证 Microsoft 玩家身份…";
-                using var auth = new MicrosoftAuth(verifyCertificates: runtime.Jvm.VerifyLoginCertificates); var result = await auth.RefreshAsync(account, token);
+                using var auth = new MicrosoftAuth(verifyCertificates: runtime.Jvm.VerifyLoginCertificates);
+                var result = await auth.RefreshAsync(account, token);
                 var index = state.Accounts.IndexOf(account); state.Accounts[index] = result.Account; identity = result.Identity; store.Save(state); ReloadAccounts();
             }
             else identity = new(account.Name, account.Uuid, "0", false);
@@ -306,7 +307,7 @@ public partial class MainWindow : Window
             await Stage("Java 已匹配");
             Log($"启动 {selected.DisplayName} · {selected.Loader} · Java {java.Version} ({java.Architecture})");
             Log("游戏目录：" + selected.RuntimeDirectory + " · " + selected.Runtime.Reason);
-            using (var network = new DownloadClient(launchSettings)) await GameLauncher.RepairAsync(gameRoot, resolved, network, Progress(), token, selected.Isolation);
+            using (var network = new DownloadClient(launchSettings)) await GameLauncher.RepairAsync(gameRoot, resolved, network, Progress(), token, selected.Isolation, java.Path);
             await Stage("依赖与资源已检查");
             if (!string.IsNullOrWhiteSpace(runtime.Jvm.PreLaunchCommand))
             {
